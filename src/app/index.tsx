@@ -1,6 +1,4 @@
-import { useState } from "react";
 import {
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -8,290 +6,291 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { Calendar } from "react-native-calendars";
+import {
+  CalendarDay,
+  useSharedCalendar
+} from "../hooks/useSharedCalendar";
+// Note: Dans un projet réel, utilisez expo-linear-gradient pour le vrai fond dégradé
 
-/**
- * Interface defining the structure of an Event object.
- * Helps TypeScript understand what data belongs to an event.
- */
-interface Event {
-  title: string;
-  participant: string;
-}
-
-/**
- * Main Screen Component for the Shared Calendar.
- * This component handles the UI and local state for event management.
- */
 export default function SharedCalendarScreen() {
-  // State: Stores all events. The key is the date string (YYYY-MM-DD)
-  const [events, setEvents] = useState<Record<string, Event[]>>({});
+  const {
+    events,
+    selectedDate,
+    setSelectedDate,
+    eventTitle,
+    setEventTitle,
+    selectedParticipantId,
+    setSelectedParticipantId,
+    handleAddEvent,
+    monthGrid,
+    currentMonthName,
+    members,
+    appBackgroundColor,
+  } = useSharedCalendar();
 
-  // State: Stores the currently selected date on the calendar
-  const [selectedDate, setSelectedDate] = useState<string>("");
+  const daysOfWeek = ["S", "M", "T", "W", "T", "F", "S"];
 
-  // State: Stores the text input for a new event title
-  const [eventTitle, setEventTitle] = useState<string>("");
-
-  // State: Tracks the selected participant for the event ('Me', 'Girlfriend', or 'Both')
-  const [participant, setParticipant] = useState<string>("Both");
-
-  /**
-   * Checks if an event already exists on the selected date to prevent accidental double-booking.
-   *
-   * @param dateString - The date to check in YYYY-MM-DD format
-   * @returns boolean - True if an event exists, false otherwise
-   */
-  const checkConflict = (dateString: string): boolean => {
-    if (events[dateString] && events[dateString].length > 0) {
-      return true;
-    }
-    return false;
+  // Trouve la couleur du membre
+  const getMemberColor = (id: string) => {
+    return members.find((m) => m.id === id)?.color || "#CCCCCC";
   };
 
-  /**
-   * Handles the action when the "Add Event" button is pressed.
-   * Includes validation for empty inputs and a warning prompt if a scheduling conflict exists.
-   */
-  const handleAddEvent = () => {
-    // Validation: Prevent empty submissions
-    if (!selectedDate || !eventTitle) {
-      Alert.alert("Error", "Please select a date and enter an event title.");
-      return;
+  const renderDayCell = (day: CalendarDay, index: number) => {
+    if (!day.isCurrentMonth) {
+      return <View key={index} style={styles.emptyCell} />;
     }
 
-    // Check for scheduling conflicts
-    if (checkConflict(selectedDate)) {
-      Alert.alert(
-        "Conflict Detected",
-        "An event is already scheduled for this date. Do you want to proceed?",
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Add Anyway", onPress: () => saveEvent() },
-        ],
-      );
-    } else {
-      saveEvent();
-    }
-  };
+    const isSelected = selectedDate === day.dateString;
+    const dayEvents = events[day.dateString] || [];
+    // Simuler le 14 du mois comme "Aujourd'hui" (Fond gris clair)
+    const isToday = day.dayNumber === "14";
 
-  /**
-   * Constructs the event object and saves it into the local state.
-   * Also resets the input fields upon successful save.
-   */
-  const saveEvent = () => {
-    const newEvent: Event = {
-      title: eventTitle,
-      participant: participant,
-    };
+    return (
+      <TouchableOpacity
+        key={index}
+        style={[
+          styles.dayCell,
+          isSelected && styles.dayCellSelected,
+          isToday && styles.dayCellToday,
+        ]}
+        onPress={() => setSelectedDate(day.dateString)}
+        activeOpacity={0.6}
+      >
+        <Text style={[styles.dayNumber, isToday && styles.textBold]}>
+          {day.dayNumber}
+        </Text>
 
-    // Update state: Keep existing events and append the new one to the selected date
-    setEvents((prevEvents) => ({
-      ...prevEvents,
-      [selectedDate]: [...(prevEvents[selectedDate] || []), newEvent],
-    }));
-
-    // Reset input and notify user
-    setEventTitle("");
-    Alert.alert("Success", "Event added successfully!");
-  };
-
-  /**
-   * Formats the stored events into the specific object structure required
-   * by the 'react-native-calendars' library to display visual markers (dots).
-   */
-  const getMarkedDates = () => {
-    let marked: any = {};
-
-    // Add a dot to every date that contains at least one event
-    Object.keys(events).forEach((date) => {
-      marked[date] = { marked: true, dotColor: "#50cebb" };
-    });
-
-    // Visually highlight the date the user has currently tapped on
-    if (selectedDate) {
-      marked[selectedDate] = {
-        ...marked[selectedDate],
-        selected: true,
-        selectedColor: "#00adf5",
-      };
-    }
-    return marked;
+        <View style={styles.pillContainer}>
+          {dayEvents.map((ev, i) => (
+            <View
+              key={i}
+              style={[
+                styles.eventPill,
+                { backgroundColor: getMemberColor(ev.participantId) },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.pillText,
+                  // Si la pilule est blanche ou très claire, on met le texte en noir
+                  getMemberColor(ev.participantId) === "#FFFFFF"
+                    ? { color: "#000" }
+                    : {},
+                ]}
+                numberOfLines={1}
+              >
+                {ev.title}
+              </Text>
+            </View>
+          ))}
+        </View>
+      </TouchableOpacity>
+    );
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.header}>Our Shared Calendar</Text>
-
-      {/* Calendar Library Component */}
-      <Calendar
-        onDayPress={(day: any) => setSelectedDate(day.dateString)}
-        markedDates={getMarkedDates()}
-        theme={{
-          selectedDayBackgroundColor: "#00adf5",
-          todayTextColor: "#00adf5",
-          arrowColor: "orange",
-        }}
-      />
-
-      {/* Conditional Rendering: Show the form only when a date is selected */}
-      {selectedDate ? (
-        <View style={styles.formContainer}>
-          <Text style={styles.dateLabel}>Selected Date: {selectedDate}</Text>
-
-          <TextInput
-            style={styles.input}
-            placeholder="Event Title (e.g. Dinner, Movie)"
-            value={eventTitle}
-            onChangeText={setEventTitle}
-          />
-
-          <Text style={styles.label}>Who is this for?</Text>
-
-          {/* Map through options to generate participant selection buttons */}
-          <View style={styles.tagContainer}>
-            {["Me", "Girlfriend", "Both"].map((tag) => (
-              <TouchableOpacity
-                key={tag}
-                style={[
-                  styles.tagButton,
-                  participant === tag && styles.tagButtonSelected,
-                ]}
-                onPress={() => setParticipant(tag)}
-              >
-                <Text
-                  style={
-                    participant === tag
-                      ? styles.tagTextSelected
-                      : styles.tagText
-                  }
-                >
-                  {tag}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <TouchableOpacity style={styles.addButton} onPress={handleAddEvent}>
-            <Text style={styles.addButtonText}>Add Event</Text>
-          </TouchableOpacity>
+    <View style={[styles.container, { backgroundColor: appBackgroundColor }]}>
+      {/* HEADER SECTION (Top colored area) */}
+      <View style={styles.headerArea}>
+        <View style={styles.topBar}>
+          <Text style={styles.monthTitle}>{currentMonthName}</Text>
+          {/* Ici viendront les icônes de liste et de paramètres */}
         </View>
-      ) : (
-        <Text style={styles.instructions}>Select a date to add an event.</Text>
-      )}
 
-      {/* Map through the selected date's events to display them below the form */}
-      <View style={styles.eventList}>
-        <Text style={styles.listHeader}>
-          Events for {selectedDate || "..."} :
-        </Text>
-        {events[selectedDate]?.map((ev, index) => (
-          <View key={index} style={styles.eventItem}>
-            <Text style={styles.eventTitle}>{ev.title}</Text>
-            <Text style={styles.eventTag}>[{ev.participant}]</Text>
-          </View>
-        ))}
+        {/* Members Horizontal List */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.membersScroll}
+        >
+          {members.map((member) => (
+            <View
+              key={member.id}
+              style={[styles.memberBadge, { backgroundColor: member.color }]}
+            >
+              <Text
+                style={[
+                  styles.memberBadgeText,
+                  member.color === "#FFFFFF" ? { color: "#000" } : {},
+                ]}
+              >
+                {member.name}
+              </Text>
+            </View>
+          ))}
+        </ScrollView>
       </View>
-    </ScrollView>
+
+      {/* CALENDAR SECTION (White background area) */}
+      <View style={styles.calendarArea}>
+        <View style={styles.daysRow}>
+          {daysOfWeek.map((day, i) => (
+            <Text key={i} style={styles.dayOfWeekText}>
+              {day}
+            </Text>
+          ))}
+        </View>
+
+        <ScrollView showsVerticalScrollIndicator={false}>
+          <View style={styles.grid}>
+            {monthGrid.map((day, index) => renderDayCell(day, index))}
+          </View>
+
+          {/* Form Section (appears below calendar when a date is selected) */}
+          {selectedDate && (
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Add event for {selectedDate}</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Event title..."
+                value={eventTitle}
+                onChangeText={setEventTitle}
+              />
+
+              {/* Quick participant selector for the form */}
+              <ScrollView horizontal style={styles.formParticipantScroll}>
+                {members.map((m) => (
+                  <TouchableOpacity
+                    key={m.id}
+                    style={[
+                      styles.formParticipantBtn,
+                      { backgroundColor: m.color },
+                      selectedParticipantId === m.id &&
+                        styles.formParticipantBtnSelected,
+                    ]}
+                    onPress={() => setSelectedParticipantId(m.id)}
+                  >
+                    <Text
+                      style={m.color === "#FFFFFF" ? { color: "#000" } : {}}
+                    >
+                      {m.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              <TouchableOpacity style={styles.addBtn} onPress={handleAddEvent}>
+                <Text style={styles.addBtnText}>Add</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </ScrollView>
+      </View>
+    </View>
   );
 }
 
-// Styling rules for the components
 const styles = StyleSheet.create({
-  container: {
-    flexGrow: 1,
-    padding: 20,
-    backgroundColor: "#fff",
-    paddingTop: 50,
-  },
-  header: {
-    fontSize: 24,
-    fontWeight: "bold",
+  container: { flex: 1 }, // Color defined inline
+
+  // Header Area
+  headerArea: { paddingTop: 60, paddingBottom: 20, paddingHorizontal: 20 },
+  topBar: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 20,
-    textAlign: "center",
   },
-  formContainer: {
-    marginTop: 20,
+  monthTitle: { fontSize: 32, fontWeight: "bold", color: "#FFFFFF" },
+
+  membersScroll: { flexDirection: "row" },
+  memberBadge: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 10,
   },
-  dateLabel: {
-    fontSize: 16,
-    fontWeight: "600",
+  memberBadgeText: { fontWeight: "bold", color: "#333" },
+
+  // Calendar Area
+  calendarArea: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    paddingTop: 20,
+    paddingHorizontal: 10,
+  },
+  daysRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
     marginBottom: 10,
   },
+  dayOfWeekText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#94A3B8",
+    width: "14.28%",
+    textAlign: "center",
+  },
+
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "flex-start",
+  },
+
+  // Cells
+  emptyCell: { width: "14.28%", height: 100, padding: 2 },
+  dayCell: {
+    width: "14.28%",
+    height: 100,
+    padding: 2,
+    borderTopWidth: 1,
+    borderColor: "#F1F5F9",
+    alignItems: "center",
+  },
+  dayCellSelected: { borderWidth: 2, borderColor: "#333", borderRadius: 8 },
+  dayCellToday: { backgroundColor: "#F1F5F9" },
+  dayNumber: { fontSize: 14, color: "#333", marginBottom: 4, marginTop: 4 },
+  textBold: { fontWeight: "bold" },
+
+  // Pills
+  pillContainer: { width: "100%", alignItems: "center", gap: 2 },
+  eventPill: {
+    width: "98%",
+    paddingVertical: 3,
+    paddingHorizontal: 2,
+    borderRadius: 4,
+  },
+  pillText: {
+    color: "#333",
+    fontSize: 10,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+
+  // Form
+  formSection: {
+    padding: 20,
+    marginTop: 20,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 16,
+  },
+  formLabel: { fontWeight: "bold", marginBottom: 10 },
   input: {
-    borderWidth: 1,
-    borderColor: "#ccc",
+    backgroundColor: "#FFF",
     padding: 12,
     borderRadius: 8,
     marginBottom: 15,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: "500",
-    marginBottom: 10,
-  },
-  tagContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 20,
-  },
-  tagButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 15,
     borderWidth: 1,
-    borderColor: "#00adf5",
-    borderRadius: 20,
+    borderColor: "#E2E8F0",
   },
-  tagButtonSelected: {
-    backgroundColor: "#00adf5",
+  formParticipantScroll: { marginBottom: 15, flexDirection: "row" },
+  formParticipantBtn: {
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 12,
+    marginRight: 10,
+    borderWidth: 2,
+    borderColor: "transparent",
   },
-  tagText: {
-    color: "#00adf5",
-  },
-  tagTextSelected: {
-    color: "#fff",
-    fontWeight: "bold",
-  },
-  addButton: {
-    backgroundColor: "#28a745",
+  formParticipantBtnSelected: { borderColor: "#333" },
+  addBtn: {
+    backgroundColor: "#0F172A",
     padding: 15,
     borderRadius: 8,
     alignItems: "center",
   },
-  addButtonText: {
-    color: "#fff",
-    fontWeight: "bold",
-    fontSize: 16,
-  },
-  instructions: {
-    marginTop: 30,
-    textAlign: "center",
-    color: "#666",
-    fontStyle: "italic",
-  },
-  eventList: {
-    marginTop: 30,
-  },
-  listHeader: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 10,
-  },
-  eventItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    backgroundColor: "#f9f9f9",
-    padding: 15,
-    borderRadius: 8,
-    marginBottom: 10,
-    borderLeftWidth: 4,
-    borderLeftColor: "#00adf5",
-  },
-  eventTitle: {
-    fontSize: 16,
-  },
-  eventTag: {
-    fontSize: 14,
-    color: "#888",
-  },
+  addBtnText: { color: "#FFF", fontWeight: "bold" },
 });
