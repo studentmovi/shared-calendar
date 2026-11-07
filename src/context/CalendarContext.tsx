@@ -3,7 +3,7 @@ import { Alert, Platform } from 'react-native';
 import * as Calendar from 'expo-calendar/legacy';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc } from 'firebase/firestore';
 import { db } from '../config/firebase'; 
 
 Notifications.setNotificationHandler({
@@ -11,6 +11,8 @@ Notifications.setNotificationHandler({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
   }),
 });
 
@@ -45,7 +47,7 @@ const INITIAL_MEMBERS: Member[] = [
 
 export const CalendarContext = createContext<any>(null);
 
-export const CalendarProvider = ({ children }: { children: ReactNode }) => {
+export const CalendarProvider = ({ children, familyId }: { children: ReactNode, familyId: string }) => {
   const [events, setEvents] = useState<Record<string, Event[]>>({});
   
   const [selectedDate, setSelectedDate] = useState<string>('');
@@ -63,15 +65,13 @@ export const CalendarProvider = ({ children }: { children: ReactNode }) => {
   const [isImporting, setIsImporting] = useState<boolean>(false);
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, 'events'), (snapshot) => {
+    if (!familyId) return;
+    const unsubscribe = onSnapshot(collection(db, 'families', familyId, 'events'), (snapshot) => {
       const cloudEvents: Record<string, Event[]> = {};
-      
       snapshot.forEach((docSnap) => {
         const data = docSnap.data();
         const eventDate = data.date;
-        
         if (!cloudEvents[eventDate]) cloudEvents[eventDate] = [];
-        
         cloudEvents[eventDate].push({
           id: docSnap.id, 
           title: data.title,
@@ -83,12 +83,27 @@ export const CalendarProvider = ({ children }: { children: ReactNode }) => {
           date: data.date
         });
       });
-      
       setEvents(cloudEvents); 
     });
-
     return () => unsubscribe(); 
-  }, []);
+  }, [familyId]);
+
+  useEffect(() => {
+    if (!familyId) return;
+    const unsubscribe = onSnapshot(doc(db, 'families', familyId), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.members) setMembers(data.members);
+        if (data.appBackgroundColor) setAppBackgroundColor(data.appBackgroundColor);
+      } else {
+        setDoc(doc(db, 'families', familyId), {
+          members: INITIAL_MEMBERS,
+          appBackgroundColor: '#FF4D4D'
+        });
+      }
+    });
+    return () => unsubscribe();
+  }, [familyId]);
 
   useEffect(() => {
     const requestPermissions = async () => {
@@ -99,7 +114,6 @@ export const CalendarProvider = ({ children }: { children: ReactNode }) => {
           const { status } = await Notifications.requestPermissionsAsync();
           finalStatus = status;
         }
-        
         if (Platform.OS === 'android') {
           try {
             await Notifications.setNotificationChannelAsync('default', {
@@ -109,7 +123,7 @@ export const CalendarProvider = ({ children }: { children: ReactNode }) => {
               lightColor: '#FF231F7C',
             });
           } catch (error) {
-            console.log("Canal ignoré dans Expo Go, fonctionnera dans l'APK : ", error);
+            console.log("Canal ignoré dans Expo Go : ", error);
           }
         }
       }
@@ -159,9 +173,8 @@ export const CalendarProvider = ({ children }: { children: ReactNode }) => {
       Alert.alert('Erreur', 'Veuillez entrer un titre.');
       return;
     }
-    
     try {
-      await addDoc(collection(db, 'events'), {
+      await addDoc(collection(db, 'families', familyId, 'events'), {
         date: selectedDate,
         title: eventTitle.trim(),
         participantId: selectedParticipantId,
@@ -170,16 +183,8 @@ export const CalendarProvider = ({ children }: { children: ReactNode }) => {
         endTime: eventEndTime.trim(),
         isAllDay: isEventAllDay
       });
-
-      if (Platform.OS !== 'web') {
-        scheduleEventNotification(eventTitle.trim(), selectedDate);
-      }
-      
-      setEventTitle('');
-      setEventDescription('');
-      setEventTime('');
-      setEventEndTime('');
-      setIsEventAllDay(false);
+      if (Platform.OS !== 'web') scheduleEventNotification(eventTitle.trim(), selectedDate);
+      setEventTitle(''); setEventDescription(''); setEventTime(''); setEventEndTime(''); setIsEventAllDay(false);
     } catch (error) {
       Alert.alert('Erreur', 'Impossible de sauvegarder sur le cloud.');
     }
@@ -187,59 +192,60 @@ export const CalendarProvider = ({ children }: { children: ReactNode }) => {
 
   const updateEvent = async (dateString: string, updatedEvent: Event) => {
     try {
-      const eventRef = doc(db, 'events', updatedEvent.id);
-      await updateDoc(eventRef, {
-        title: updatedEvent.title,
-        participantId: updatedEvent.participantId,
-        description: updatedEvent.description,
-        time: updatedEvent.time,
-        endTime: updatedEvent.endTime,
-        isAllDay: updatedEvent.isAllDay,
+      await updateDoc(doc(db, 'families', familyId, 'events', updatedEvent.id), {
+        title: updatedEvent.title, participantId: updatedEvent.participantId,
+        description: updatedEvent.description, time: updatedEvent.time,
+        endTime: updatedEvent.endTime, isAllDay: updatedEvent.isAllDay,
       });
-    } catch (error) {
-      Alert.alert('Erreur', 'Impossible de modifier cet événement.');
-    }
+    } catch (error) { Alert.alert('Erreur', 'Impossible de modifier cet événement.'); }
   };
 
   const deleteEvent = async (dateString: string, eventId: string) => {
-    try {
-      await deleteDoc(doc(db, 'events', eventId));
-    } catch (error) {
-      Alert.alert('Erreur', 'Impossible de supprimer cet événement.');
-    }
+    try { await deleteDoc(doc(db, 'families', familyId, 'events', eventId)); } 
+    catch (error) { Alert.alert('Erreur', 'Impossible de supprimer cet événement.'); }
   };
 
-  const addMember = (name: string, color: string) => {
+  const addMember = async (name: string, color: string) => {
     if (!name.trim()) return;
-    setMembers([...members, { id: Date.now().toString(), name, color }]);
+    const newMembers = [...members, { id: Date.now().toString(), name, color }];
+    setMembers(newMembers); 
+    await setDoc(doc(db, 'families', familyId), { members: newMembers }, { merge: true });
   };
-  const updateMember = (id: string, name: string, color: string) => {
+
+  const updateMember = async (id: string, name: string, color: string) => {
     if (!name.trim()) return;
-    setMembers(members.map(m => m.id === id ? { ...m, name, color } : m));
+    const newMembers = members.map(m => m.id === id ? { ...m, name, color } : m);
+    setMembers(newMembers);
+    await setDoc(doc(db, 'families', familyId), { members: newMembers }, { merge: true });
   };
-  const deleteMember = (id: string) => {
+
+  const deleteMember = async (id: string) => {
     if (members.length <= 1) return Alert.alert('Erreur', 'Vous devez garder au moins un membre.');
-    setMembers(members.filter(m => m.id !== id));
-    if (selectedParticipantId === id) setSelectedParticipantId(members[0].id);
+    const newMembers = members.filter(m => m.id !== id);
+    setMembers(newMembers);
+    if (selectedParticipantId === id) setSelectedParticipantId(newMembers[0].id);
+    await setDoc(doc(db, 'families', familyId), { members: newMembers }, { merge: true });
+  };
+
+  const updateAppBackgroundColor = async (color: string) => {
+    setAppBackgroundColor(color);
+    await setDoc(doc(db, 'families', familyId), { appBackgroundColor: color }, { merge: true });
   };
 
   const importDeviceEvents = async (targetParticipantId: string) => {
     try {
       setIsImporting(true);
-
       const { status } = await Calendar.requestCalendarPermissionsAsync();
       if (status !== 'granted') {
         setIsImporting(false);
         return Alert.alert('Erreur', 'Permission refusée.');
       }
-
       const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
       const calendarIds = calendars.map(c => c.id);
       if (calendarIds.length === 0) {
         setIsImporting(false);
         return Alert.alert('Info', 'Aucun calendrier trouvé.');
       }
-
       const startDate = new Date(); startDate.setMonth(startDate.getMonth() - 1);
       const endDate = new Date(); endDate.setMonth(endDate.getMonth() + 6);
       const nativeEvents = await Calendar.getEventsAsync(calendarIds, startDate, endDate);
@@ -250,22 +256,18 @@ export const CalendarProvider = ({ children }: { children: ReactNode }) => {
       }
 
       let addedCount = 0; 
-
       for (const ev of nativeEvents) {
         const dStart = new Date(ev.startDate);
         const dEnd = new Date(ev.endDate); 
         const dateStr = `${dStart.getFullYear()}-${String(dStart.getMonth() + 1).padStart(2, '0')}-${String(dStart.getDate()).padStart(2, '0')}`;
         
         const isDuplicate = (events[dateStr] || []).some(existingEv => 
-          existingEv.title === ev.title && 
-          existingEv.participantId === targetParticipantId
+          existingEv.title === ev.title && existingEv.participantId === targetParticipantId
         );
 
         if (!isDuplicate) {
-          await addDoc(collection(db, 'events'), {
-            date: dateStr,
-            title: ev.title,
-            participantId: targetParticipantId,
+          await addDoc(collection(db, 'families', familyId, 'events'), {
+            date: dateStr, title: ev.title, participantId: targetParticipantId,
             description: ev.notes || '',
             time: ev.allDay ? '' : dStart.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
             endTime: ev.allDay ? '' : dEnd.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
@@ -274,12 +276,8 @@ export const CalendarProvider = ({ children }: { children: ReactNode }) => {
           addedCount++;
         }
       }
-
-      if (addedCount === 0) {
-        Alert.alert('Info', 'Tout est déjà à jour ! Aucun nouvel événement à importer.');
-      } else {
-        Alert.alert('Succès', `${addedCount} nouveaux événements synchronisés dans le cloud !`);
-      }
+      if (addedCount === 0) Alert.alert('Info', 'Tout est déjà à jour ! Aucun nouvel événement à importer.');
+      else Alert.alert('Succès', `${addedCount} nouveaux événements synchronisés dans le cloud !`);
     } catch (error) {
       Alert.alert('Erreur', 'Impossible d\'importer les calendriers.');
     } finally {
@@ -298,7 +296,7 @@ export const CalendarProvider = ({ children }: { children: ReactNode }) => {
       monthGrid: getMonthGrid(), currentMonthName: currentMonth.toLocaleString('fr-FR', { month: 'long', year: 'numeric' }),
       nextMonth, prevMonth,
       members, addMember, updateMember, deleteMember, 
-      appBackgroundColor, setAppBackgroundColor, importDeviceEvents,
+      appBackgroundColor, setAppBackgroundColor: updateAppBackgroundColor, importDeviceEvents,
       isImporting
     }}>
       {children}
