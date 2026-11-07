@@ -2,14 +2,13 @@ import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyAYGNyEMwyRPVHSHlhthdiU9rDQ2Ga_uzU",
-  authDomain: "syncro-4a807.firebaseapp.com",
-  projectId: "syncro-4a807",
-  storageBucket: "syncro-4a807.firebasestorage.app",
-  messagingSenderId: "480581985063",
-  appId: "1:480581985063:web:eb0168cae7f33b81e27f02"
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID
 };
 
 const app = initializeApp(firebaseConfig);
-// On exporte la base de données (db) pour pouvoir l'utiliser dans le calendrier
 export const db = getFirestore(app);
