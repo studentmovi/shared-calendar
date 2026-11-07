@@ -81,26 +81,19 @@ export default function SharedCalendarScreen() {
       >
         <Text style={[styles.dayNumber, isToday && styles.textBold]}>{day.dayNumber}</Text>
         <View style={styles.pillContainer}>
-          {dayEvents.map((ev: Event, i: number) => {
-             // Construction de la chaîne d'heure (ex: "14:30 - 15:30" ou juste "14:30")
-             let timeString = '';
-             if (!ev.isAllDay && ev.time) {
-                 timeString = ev.endTime ? `${ev.time}-${ev.endTime} ` : `${ev.time} `;
-             }
-             
-             return (
-               <TouchableOpacity 
-                 key={i} 
-                 style={[styles.eventPill, { backgroundColor: getMemberColor(ev.participantId) }]}
-                 onPress={() => handleEventPress(ev, day.dateString)}
-                 activeOpacity={0.7}
-               >
-                 <Text style={[styles.pillText, getMemberColor(ev.participantId) === '#FFFFFF' ? {color: '#000'} : {}]} numberOfLines={1}>
-                   {timeString}{ev.title}
-                 </Text>
-               </TouchableOpacity>
-             );
-          })}
+          {dayEvents.map((ev: Event, i: number) => (
+             <TouchableOpacity 
+               key={i} 
+               style={[styles.eventPill, { backgroundColor: getMemberColor(ev.participantId) }]}
+               onPress={() => handleEventPress(ev, day.dateString)}
+               activeOpacity={0.7}
+             >
+               {/* On affiche juste le titre, pour ne plus couper le texte */}
+               <Text style={[styles.pillText, getMemberColor(ev.participantId) === '#FFFFFF' ? {color: '#000'} : {}]} numberOfLines={1}>
+                 {ev.title}
+               </Text>
+             </TouchableOpacity>
+          ))}
         </View>
       </TouchableOpacity>
     );
@@ -269,7 +262,6 @@ const styles = StyleSheet.create({
   addBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 15 },
   subLabel: { fontSize: 14, fontWeight: '600', color: '#333' },
 
-  // Styles de la Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: '#FFFFFF', padding: 24, borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingBottom: 50 },
   modalHeader: { fontSize: 20, fontWeight: 'bold', marginBottom: 20, color: '#0F172A' },

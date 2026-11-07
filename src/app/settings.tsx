@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { useSharedCalendar } from '../hooks/useSharedCalendar';
 import Constants from 'expo-constants';
 
@@ -7,10 +7,9 @@ const APP_COLORS = ['#FF4D4D', '#F97316', '#10B981', '#3B82F6', '#8B5CF6', '#1E2
 const MEMBER_COLORS = ['#FFFFFF', '#FBCFE8', '#FDE047', '#67E8F9', '#FDBA74', '#D9F99D', '#E9D5FF'];
 
 export default function SettingsScreen() {
-  const { appBackgroundColor, setAppBackgroundColor, members, addMember, updateMember, deleteMember, importDeviceEvents } = useSharedCalendar();
+  const { appBackgroundColor, setAppBackgroundColor, members, addMember, updateMember, deleteMember, importDeviceEvents, isImporting } = useSharedCalendar();
   
-  // On calcule la version ICI, au moment où la page s'affiche, pour éviter les crashs au démarrage
-  const appVersion = `V${Constants.expoConfig?.version || '0.6.0'}`;
+  const appVersion = `V${Constants.expoConfig?.version || '1.2.0'}`;
 
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
   const [memberName, setMemberName] = useState('');
@@ -70,10 +69,15 @@ export default function SettingsScreen() {
               key={m.id} 
               style={[styles.importBtn, { backgroundColor: m.color }]} 
               onPress={() => importDeviceEvents(m.id)}
+              disabled={isImporting}
             >
-              <Text style={[styles.importBtnText, m.color === '#FFFFFF' ? {color: '#000'} : {}]}>
-                Importer pour {m.name}
-              </Text>
+              {isImporting ? (
+                <ActivityIndicator color={m.color === '#FFFFFF' ? '#000' : '#FFFFFF'} />
+              ) : (
+                <Text style={[styles.importBtnText, m.color === '#FFFFFF' ? {color: '#000'} : {}]}>
+                  Importer pour {m.name}
+                </Text>
+              )}
             </TouchableOpacity>
           ))}
         </View>
@@ -127,7 +131,6 @@ export default function SettingsScreen() {
         </View>
       </View>
 
-      {/* Affichage de la version */}
       <View style={styles.versionContainer}>
         <Text style={styles.versionText}>{appVersion}</Text>
       </View>
@@ -156,7 +159,7 @@ const styles = StyleSheet.create({
   actionBtn: { flex: 1, padding: 12, borderRadius: 10, alignItems: 'center' },
   actionBtnText: { color: '#FFF', fontWeight: 'bold' },
   importList: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  importBtn: { paddingHorizontal: 15, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0' },
+  importBtn: { paddingHorizontal: 15, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', minWidth: 100, alignItems: 'center', justifyContent: 'center' },
   importBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 13 },
   versionContainer: { alignItems: 'center', paddingVertical: 20 },
   versionText: { color: '#94A3B8', fontSize: 14, fontWeight: 'bold', letterSpacing: 1 }

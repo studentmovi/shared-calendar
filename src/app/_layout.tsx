@@ -1,7 +1,8 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { CalendarProvider } from '../context/CalendarContext';
-import { Ionicons } from '@expo/vector-icons'; // Importation des icônes natives
+import { Ionicons } from '@expo/vector-icons';
+import { Platform } from 'react-native';
 
 export default function TabLayout() {
   return (
@@ -13,9 +14,10 @@ export default function TabLayout() {
             backgroundColor: '#FFFFFF',
             borderTopWidth: 1,
             borderTopColor: '#E2E8F0',
-            height: 60, // Hauteur sécurisée pour Android
-            paddingBottom: 5,
+            // Marges dynamiques pour ne pas chevaucher la barre Android
+            paddingBottom: Platform.OS === 'android' ? 10 : 25,
             paddingTop: 5,
+            minHeight: Platform.OS === 'android' ? 65 : 85,
           },
           tabBarActiveTintColor: '#0F172A',
           tabBarInactiveTintColor: '#94A3B8',
