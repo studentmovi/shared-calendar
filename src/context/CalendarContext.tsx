@@ -8,7 +8,8 @@ export interface Event {
   participantId: string;
   description?: string;
   time?: string;
-  isAllDay?: boolean; // NOUVEAU : Définit si l'événement dure toute la journée
+  endTime?: string; // NOUVEAU : Heure de fin
+  isAllDay?: boolean; 
 }
 
 export interface CalendarDay {
@@ -37,8 +38,9 @@ export const CalendarProvider = ({ children }: { children: ReactNode }) => {
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [eventTitle, setEventTitle] = useState<string>('');
   const [eventDescription, setEventDescription] = useState<string>('');
-  const [eventTime, setEventTime] = useState<string>(''); // NOUVEAU : Heure pour le formulaire d'ajout
-  const [isEventAllDay, setIsEventAllDay] = useState<boolean>(false); // NOUVEAU : Toggle toute la journée pour l'ajout
+  const [eventTime, setEventTime] = useState<string>(''); 
+  const [eventEndTime, setEventEndTime] = useState<string>(''); // NOUVEAU : État pour l'heure de fin
+  const [isEventAllDay, setIsEventAllDay] = useState<boolean>(false); 
   
   const [selectedParticipantId, setSelectedParticipantId] = useState<string>(INITIAL_MEMBERS[0].id);
   
@@ -68,7 +70,6 @@ export const CalendarProvider = ({ children }: { children: ReactNode }) => {
   const nextMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
   const prevMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
 
-  // --- GESTION DES ÉVÉNEMENTS ---
   const handleAddEvent = () => {
     if (!eventTitle.trim()) {
       Alert.alert('Erreur', 'Veuillez entrer un titre.');
@@ -80,6 +81,7 @@ export const CalendarProvider = ({ children }: { children: ReactNode }) => {
       participantId: selectedParticipantId,
       description: eventDescription.trim(),
       time: eventTime.trim(),
+      endTime: eventEndTime.trim(),
       isAllDay: isEventAllDay
     };
     
@@ -91,6 +93,7 @@ export const CalendarProvider = ({ children }: { children: ReactNode }) => {
     setEventTitle('');
     setEventDescription('');
     setEventTime('');
+    setEventEndTime('');
     setIsEventAllDay(false);
   };
 
@@ -108,7 +111,6 @@ export const CalendarProvider = ({ children }: { children: ReactNode }) => {
     }));
   };
 
-  // --- GESTION DES MEMBRES ---
   const addMember = (name: string, color: string) => {
     if (!name.trim()) return;
     setMembers([...members, { id: Date.now().toString(), name, color }]);
@@ -123,7 +125,6 @@ export const CalendarProvider = ({ children }: { children: ReactNode }) => {
     if (selectedParticipantId === id) setSelectedParticipantId(members[0].id);
   };
 
-  // --- IMPORT CALENDRIER NATIF ---
   const importDeviceEvents = async (targetParticipantId: string) => {
     try {
       const { status } = await Calendar.requestCalendarPermissionsAsync();
@@ -142,8 +143,9 @@ export const CalendarProvider = ({ children }: { children: ReactNode }) => {
       const importedData: Record<string, Event[]> = {};
 
       nativeEvents.forEach(ev => {
-        const d = new Date(ev.startDate);
-        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const dStart = new Date(ev.startDate);
+        const dEnd = new Date(ev.endDate); // NOUVEAU : On récupère l'heure de fin
+        const dateStr = `${dStart.getFullYear()}-${String(dStart.getMonth() + 1).padStart(2, '0')}-${String(dStart.getDate()).padStart(2, '0')}`;
         
         if (!importedData[dateStr]) importedData[dateStr] = [];
         
@@ -152,8 +154,9 @@ export const CalendarProvider = ({ children }: { children: ReactNode }) => {
           title: ev.title,
           participantId: targetParticipantId,
           description: ev.notes || '',
-          time: d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-          isAllDay: ev.allDay // NOUVEAU : Récupère l'info "Toute la journée" du téléphone
+          time: ev.allDay ? undefined : dStart.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+          endTime: ev.allDay ? undefined : dEnd.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+          isAllDay: ev.allDay
         });
       });
 
@@ -177,7 +180,8 @@ export const CalendarProvider = ({ children }: { children: ReactNode }) => {
     <CalendarContext.Provider value={{
       events, selectedDate, setSelectedDate, 
       eventTitle, setEventTitle, eventDescription, setEventDescription,
-      eventTime, setEventTime, isEventAllDay, setIsEventAllDay,
+      eventTime, setEventTime, eventEndTime, setEventEndTime,
+      isEventAllDay, setIsEventAllDay,
       selectedParticipantId, setSelectedParticipantId, 
       handleAddEvent, updateEvent, deleteEvent,
       monthGrid: getMonthGrid(), currentMonthName: currentMonth.toLocaleString('fr-FR', { month: 'long', year: 'numeric' }),

@@ -6,7 +6,8 @@ export default function SharedCalendarScreen() {
   const {
     events, selectedDate, setSelectedDate, 
     eventTitle, setEventTitle, eventDescription, setEventDescription,
-    eventTime, setEventTime, isEventAllDay, setIsEventAllDay,
+    eventTime, setEventTime, eventEndTime, setEventEndTime,
+    isEventAllDay, setIsEventAllDay,
     selectedParticipantId, setSelectedParticipantId, 
     handleAddEvent, updateEvent, deleteEvent,
     monthGrid, currentMonthName, nextMonth, prevMonth,
@@ -20,6 +21,7 @@ export default function SharedCalendarScreen() {
   const [modalTitle, setModalTitle] = useState('');
   const [modalDescription, setModalDescription] = useState('');
   const [modalTime, setModalTime] = useState('');
+  const [modalEndTime, setModalEndTime] = useState('');
   const [modalIsAllDay, setModalIsAllDay] = useState(false);
   const [modalParticipantId, setModalParticipantId] = useState('');
 
@@ -35,6 +37,7 @@ export default function SharedCalendarScreen() {
     setModalTitle(ev.title);
     setModalDescription(ev.description || '');
     setModalTime(ev.time || '');
+    setModalEndTime(ev.endTime || '');
     setModalIsAllDay(ev.isAllDay || false);
     setModalParticipantId(ev.participantId);
     setModalVisible(true);
@@ -47,6 +50,7 @@ export default function SharedCalendarScreen() {
         title: modalTitle,
         description: modalDescription,
         time: modalTime,
+        endTime: modalEndTime,
         isAllDay: modalIsAllDay,
         participantId: modalParticipantId
       });
@@ -77,19 +81,26 @@ export default function SharedCalendarScreen() {
       >
         <Text style={[styles.dayNumber, isToday && styles.textBold]}>{day.dayNumber}</Text>
         <View style={styles.pillContainer}>
-          {dayEvents.map((ev: Event, i: number) => (
-             <TouchableOpacity 
-               key={i} 
-               style={[styles.eventPill, { backgroundColor: getMemberColor(ev.participantId) }]}
-               onPress={() => handleEventPress(ev, day.dateString)}
-               activeOpacity={0.7}
-             >
-               <Text style={[styles.pillText, getMemberColor(ev.participantId) === '#FFFFFF' ? {color: '#000'} : {}]} numberOfLines={1}>
-                 {/* Si ce n'est pas toute la journée et qu'il y a une heure, on affiche l'heure, sinon juste le titre */}
-                 {!ev.isAllDay && ev.time ? `${ev.time} ` : ''}{ev.title}
-               </Text>
-             </TouchableOpacity>
-          ))}
+          {dayEvents.map((ev: Event, i: number) => {
+             // Construction de la chaîne d'heure (ex: "14:30 - 15:30" ou juste "14:30")
+             let timeString = '';
+             if (!ev.isAllDay && ev.time) {
+                 timeString = ev.endTime ? `${ev.time}-${ev.endTime} ` : `${ev.time} `;
+             }
+             
+             return (
+               <TouchableOpacity 
+                 key={i} 
+                 style={[styles.eventPill, { backgroundColor: getMemberColor(ev.participantId) }]}
+                 onPress={() => handleEventPress(ev, day.dateString)}
+                 activeOpacity={0.7}
+               >
+                 <Text style={[styles.pillText, getMemberColor(ev.participantId) === '#FFFFFF' ? {color: '#000'} : {}]} numberOfLines={1}>
+                   {timeString}{ev.title}
+                 </Text>
+               </TouchableOpacity>
+             );
+          })}
         </View>
       </TouchableOpacity>
     );
@@ -98,7 +109,6 @@ export default function SharedCalendarScreen() {
   return (
     <View style={[styles.container, { backgroundColor: appBackgroundColor }]}>
       
-      {/* HEADER */}
       <View style={styles.headerArea}>
         <View style={styles.topBar}>
           <TouchableOpacity onPress={prevMonth} style={styles.navBtn}><Text style={styles.navBtnText}>&lt;</Text></TouchableOpacity>
@@ -114,7 +124,6 @@ export default function SharedCalendarScreen() {
         </ScrollView>
       </View>
 
-      {/* CALENDRIER */}
       <View style={styles.calendarArea}>
         <View style={styles.daysRow}>
           {daysOfWeek.map((day, i) => <Text key={i} style={styles.dayOfWeekText}>{day}</Text>)}
@@ -125,7 +134,6 @@ export default function SharedCalendarScreen() {
             {monthGrid.map((day: CalendarDay, index: number) => renderDayCell(day, index))}
           </View>
 
-          {/* FORMULAIRE D'AJOUT (en bas) */}
           {selectedDate !== '' && (
             <View style={styles.formSection}>
               <Text style={styles.formLabel}>Ajouter un événement le {selectedDate}</Text>
@@ -139,7 +147,10 @@ export default function SharedCalendarScreen() {
                       <Switch value={isEventAllDay} onValueChange={setIsEventAllDay} />
                   </View>
                   {!isEventAllDay && (
-                      <TextInput style={[styles.input, { flex: 1, marginBottom: 0 }]} placeholder="Heure (ex: 14:30)" value={eventTime} onChangeText={setEventTime} />
+                      <View style={styles.timesContainer}>
+                        <TextInput style={[styles.input, { flex: 1, marginBottom: 0 }]} placeholder="Début (14:30)" value={eventTime} onChangeText={setEventTime} />
+                        <TextInput style={[styles.input, { flex: 1, marginBottom: 0 }]} placeholder="Fin (15:30)" value={eventEndTime} onChangeText={setEventEndTime} />
+                      </View>
                   )}
               </View>
 
@@ -163,7 +174,6 @@ export default function SharedCalendarScreen() {
         </ScrollView>
       </View>
 
-      {/* MODAL POUR VOIR/MODIFIER LES DÉTAILS D'UN ÉVÉNEMENT */}
       <Modal visible={isModalVisible} transparent={true} animationType="slide">
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -178,7 +188,10 @@ export default function SharedCalendarScreen() {
                     <Switch value={modalIsAllDay} onValueChange={setModalIsAllDay} />
                 </View>
                 {!modalIsAllDay && (
-                    <TextInput style={[styles.input, { flex: 1, marginBottom: 0 }]} placeholder="Heure (ex: 14:30)" value={modalTime} onChangeText={setModalTime} />
+                    <View style={styles.timesContainer}>
+                        <TextInput style={[styles.input, { flex: 1, marginBottom: 0 }]} placeholder="Début" value={modalTime} onChangeText={setModalTime} />
+                        <TextInput style={[styles.input, { flex: 1, marginBottom: 0 }]} placeholder="Fin" value={modalEndTime} onChangeText={setModalEndTime} />
+                    </View>
                 )}
             </View>
 
@@ -246,8 +259,9 @@ const styles = StyleSheet.create({
   formSection: { padding: 20, marginTop: 20, backgroundColor: '#F8FAFC', borderRadius: 16 },
   formLabel: { fontWeight: 'bold', marginBottom: 10, fontSize: 16 },
   input: { backgroundColor: '#FFF', padding: 14, borderRadius: 10, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0' },
-  timeRow: { flexDirection: 'row', alignItems: 'center', gap: 15, marginBottom: 10 },
-  switchContainer: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  timeRow: { flexDirection: 'column', gap: 10, marginBottom: 10 },
+  switchContainer: { flexDirection: 'row', alignItems: 'center', gap: 10, alignSelf: 'flex-start' },
+  timesContainer: { flexDirection: 'row', gap: 10 },
   formParticipantScroll: { marginBottom: 15, flexDirection: 'row' },
   formParticipantBtn: { paddingHorizontal: 15, paddingVertical: 10, borderRadius: 12, marginRight: 10, borderWidth: 2, borderColor: 'transparent' },
   formParticipantBtnSelected: { borderColor: '#333' },
