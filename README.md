@@ -1,56 +1,39 @@
-# Welcome to your Expo app 👋
+# Syncro
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+**Syncro** is a modern, premium shared family calendar application designed to keep households perfectly organized. It offers seamless real-time synchronization, secure multi-account management, and full customization to fit your family's daily life.
 
-## Get started
+---
 
-1. Install dependencies
+## 💡 The Story
 
-   ```bash
-   npm install
-   ```
+Tired of constant back-and-forth arguments with your partner, family, or friends just to plan a weekend getaway, upcoming vacation, or a simple night out? Between forgotten messages, clashing schedules, and endless reminders, organizing life quickly becomes a headache.
 
-2. Start the app
+**Syncro is here to make everything simple.**
 
-   ```bash
-   npx expo start
-   ```
+Forget complicated planning. With **Syncro**, centralize all your schedules in one place:
+* **Effortless Import:** No need to rewrite everything. Instantly pull events already saved in your phone calendars (Google Calendar, native device calendars, etc.) and assign them directly to specific family members.
+* **Bring Your Circle Together:** Create and manage your "family" or group of friends in just a few clicks to share a seamless, real-time synchronized, and secure space.
+* **Personalize Your Universe:** Choose your own color codes, customize the app to your taste, and enjoy an interface designed to make life easier wherever you go.
 
-In the output, you'll find options to open the app in a
+Take back control of your free time and enjoy the present moment.  
+**Syncro: Organize less, live more.**
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+---
 
-You can start developing by editing the files inside the **src/app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## 🌟 Key Features
 
-## Get a fresh project
+* **Real-Time Shared Calendar:** Keep all family members on the same page with instant updates across devices.
+* **Secure Family Spaces:** Private data isolation per household using secure invitation codes.
+* **Account Security:** Reliable authentication with mandatory email verification and easy password recovery options.
+* **Member Management:** Create and customize family members with a tailored color palette and an interactive color picker.
+* **App Personalization:** Match the app's visual identity to your preferences with custom accent colors.
+* **Device Integration:** Seamlessly import native phone calendar events and assign them directly to any family member.
+* **Offline Support:** Access your schedule anytime, even without an active internet connection.
 
-When you're ready, run:
+---
 
-```bash
-npm run reset-project
-```
+## 📄 License & Ownership
 
-This command will move the starter code to the **example** directory and create a blank **src/app** directory where you can start developing.
+Copyright © 2026 **Erwan Michel**. All rights reserved.
 
-### Other setup steps
-
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+This software and its documentation are the proprietary property of Erwan Michel. Unauthorized copying, modification, distribution, commercial exploitation, or use of this software, via any medium, is strictly prohibited without prior written consent from the owner.
