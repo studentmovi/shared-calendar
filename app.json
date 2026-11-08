@@ -11,6 +11,7 @@
       "icon": "./assets/images/logo-syncro.png"
     },
     "android": {
+      "package": "com.studentmoviecorp.syncro",
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/images/logo-syncro.png",
@@ -39,6 +40,16 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "f4ed9c44-ecef-4b8c-955a-183b68d09c9d"
+      }
     }
   }
 }
