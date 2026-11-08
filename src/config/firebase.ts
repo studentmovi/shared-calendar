@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { initializeFirestore, persistentLocalCache } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth';
+import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
@@ -13,8 +14,12 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-export const auth = getAuth(app);
-// NOUVEAU : Force Firebase à envoyer les mails (vérification, reset mdp) en Français
+// NOUVEAU : Initialisation de l'authentification avec mémorisation de session locale
+export const auth = initializeAuth(app, {
+  persistence: getReactNativePersistence(AsyncStorage)
+});
+
+// Force Firebase à envoyer les mails (vérification, reset mdp) en Français
 auth.languageCode = 'fr'; 
 
 export const db = initializeFirestore(app, {

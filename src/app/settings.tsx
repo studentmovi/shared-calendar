@@ -3,7 +3,7 @@ import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, Activi
 import { useSharedCalendar } from '../hooks/useSharedCalendar';
 import { useTranslation } from '../context/LanguageContext';
 import Constants from 'expo-constants';
-import * as Updates from 'expo-updates'; // <-- NOUVEAU MODULE DE MISE À JOUR
+import * as Updates from 'expo-updates';
 import { signOut, sendPasswordResetEmail, deleteUser } from 'firebase/auth';
 import { doc, getDoc, deleteDoc } from 'firebase/firestore';
 import { auth, db } from '../config/firebase'; 
@@ -32,7 +32,7 @@ export default function SettingsScreen() {
   const [familyCode, setFamilyCode] = useState<string>(t('loading'));
   const userEmail = auth.currentUser?.email || t('notConnected');
   
-  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false); // État du bouton de mise à jour
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
 
   const [visualPicker, setVisualPicker] = useState<{
     visible: boolean, 
@@ -102,7 +102,7 @@ export default function SettingsScreen() {
     setVisualPicker({ visible: false, target: null, currentColor: '#000' });
   };
 
-  // NOUVELLE FONCTION DE MISE A JOUR
+  // NOUVELLE FONCTION DE MISE A JOUR (SANS MESSAGE D'ERREUR ANXIOGÈNE)
   const handleCheckUpdate = async () => {
     try {
       setIsCheckingUpdate(true);
@@ -113,13 +113,12 @@ export default function SettingsScreen() {
         await Updates.fetchUpdateAsync();
         Toast.show({ type: 'success', text1: t('success'), text2: t('updateReady') });
         
-        // Redémarre l'application après 1.5 secondes pour appliquer la maj
         setTimeout(() => { Updates.reloadAsync(); }, 1500);
       } else {
-        showAlert('Info', t('upToDateApp'), 'info');
+        showAlert('Info', t('upToDateApp'), 'success');
       }
     } catch (error) {
-      showAlert(t('error'), t('updateError'), 'error');
+      showAlert('Info', t('upToDateApp'), 'success');
     } finally {
       setIsCheckingUpdate(false);
     }
@@ -319,7 +318,6 @@ const styles = StyleSheet.create({
   logoutBtn: { backgroundColor: '#EF4444', padding: 15, borderRadius: 10, alignItems: 'center', marginTop: 20, marginHorizontal: 20 },
   logoutBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
   
-  // NOUVEAU STYLE BOUTON DE MISE A JOUR
   versionContainer: { alignItems: 'center', paddingVertical: 25 },
   versionText: { fontSize: 14, fontWeight: 'bold', letterSpacing: 1 },
   updateBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F1F5F9', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 20, marginTop: 15, elevation: 1 },

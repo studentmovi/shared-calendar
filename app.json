@@ -2,7 +2,7 @@
   "expo": {
     "name": "Syncro",
     "slug": "syncro",
-    "version": "1.5.0",
+    "version": "1.6.0",
     "orientation": "portrait",
     "icon": "./assets/images/logo-syncro.png",
     "scheme": "syncro",
@@ -55,9 +55,7 @@
         "projectId": "f4ed9c44-ecef-4b8c-955a-183b68d09c9d"
       }
     },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "1",
     "updates": {
       "url": "https://u.expo.dev/f4ed9c44-ecef-4b8c-955a-183b68d09c9d"
     }
