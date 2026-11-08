@@ -49,7 +49,7 @@ export default function RootLayout() {
         setIsAuthenticated(false);
         setFamilyId(null);
       }
-      setTimeout(() => setIsAppLoading(false), 3000);
+      setTimeout(() => setIsAppLoading(false), 4500);
     });
     return () => unsubscribe();
   }, []);

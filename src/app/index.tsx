@@ -2,6 +2,56 @@ import React, { useState } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Modal, KeyboardAvoidingView, Platform, Switch } from 'react-native';
 import { useSharedCalendar, CalendarDay, Event } from '../hooks/useSharedCalendar';
 
+// --- MOTEUR DE RÈGLES PREMIUM (Couleurs des pilules d'événements) ---
+const PERSONAL_KEYWORDS_RULES = [
+  { keywords: ['pompier', 'feu', 'caserne'], bg: '#DC2626', text: '#FFFFFF', icon: '🚒' },
+  { keywords: ['garde', 'astreinte'], bg: '#2563EB', text: '#FFFFFF', icon: '🛡️' },
+  { keywords: ['amour', 'resto', 'date'], bg: '#DB2777', text: '#FFFFFF', icon: '💕' },
+  { keywords: ['médecin', 'rdv médical'], bg: '#059669', text: '#FFFFFF', icon: '🩺' }
+];
+
+const applyPersonalRules = (title: string, defaultColor: string) => {
+  const lowerTitle = title.toLowerCase();
+  for (const rule of PERSONAL_KEYWORDS_RULES) {
+    if (rule.keywords.some(kw => lowerTitle.includes(kw))) {
+      return { bg: rule.bg, text: rule.text, icon: rule.icon, isCustom: true };
+    }
+  }
+  return { bg: defaultColor, text: defaultColor === '#FFFFFF' ? '#000000' : '#FFFFFF', icon: '', isCustom: false };
+};
+
+// --- MOTEUR DE DÉCORATION SAISONNIÈRE (En-tête) ---
+const getMonthDecoration = (monthIndex: number) => {
+  if (monthIndex === 9) return { left: '🕸️', right: '🎃', subtitle: "Joyeux Halloween !" };
+  if (monthIndex === 11) return { left: '🎄', right: '🎁', subtitle: "Période des fêtes" };
+  if (monthIndex === 0) return { left: '🥂', right: '🎆', subtitle: `Bonne Année ${new Date().getFullYear()} !` };
+  if (monthIndex === 1) return { left: '💘', right: '🍫', subtitle: "Mois de l'amour" };
+  return { left: '', right: '', subtitle: '' };
+};
+
+// --- NOUVEAU : MOTEUR DE DÉCORATION DES CASES DU CALENDRIER ---
+const getCellDecoration = (dateStr: string, eventsForDay: Event[]) => {
+  const d = new Date(dateStr);
+  const month = d.getMonth();
+  const day = d.getDate();
+
+  let decoration = null;
+
+  // 1. Fêtes fixes de base (Saint-Valentin, Halloween, Noël, Nouvel An)
+  if (month === 1 && day === 14) decoration = { tl: '💘', br: '🌹', borderColor: '#FDA4AF' };
+  else if (month === 9 && day === 31) decoration = { tl: '🕸️', br: '🕷️', borderColor: '#FDBA74' };
+  else if (month === 11 && (day === 24 || day === 25)) decoration = { tl: '🎄', br: '🎁', borderColor: '#86EFAC' };
+  else if ((month === 11 && day === 31) || (month === 0 && day === 1)) decoration = { tl: '🎆', br: '🥂', borderColor: '#FDE047' };
+
+  // 2. Règle Premium personnelle : Si un événement contient "Flavie"
+  const hasCoupleEvent = eventsForDay.some(ev => ev.title.toLowerCase().includes('flavie'));
+  if (hasCoupleEvent) {
+    decoration = { tl: '💕', br: '💕', borderColor: '#FBCFE8' }; // Écrase la fête de base avec des cœurs !
+  }
+
+  return decoration;
+};
+
 export default function SharedCalendarScreen() {
   const {
     events, selectedDate, setSelectedDate, 
@@ -29,6 +79,12 @@ export default function SharedCalendarScreen() {
   const todayDate = new Date();
   const todayString = `${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, '0')}-${String(todayDate.getDate()).padStart(2, '0')}`;
 
+  const displayedMonthIndex = monthGrid.find(d => d.isCurrentMonth) 
+    ? new Date(monthGrid.find(d => d.isCurrentMonth)!.dateString).getMonth() 
+    : todayDate.getMonth();
+  
+  const decorations = getMonthDecoration(displayedMonthIndex);
+
   const getMemberColor = (id: string) => members.find((m: any) => m.id === id)?.color || '#CCCCCC';
 
   const handleEventPress = (ev: Event, dateString: string) => {
@@ -46,12 +102,8 @@ export default function SharedCalendarScreen() {
   const handleSaveEdit = () => {
     if (editingEvent && editingDate) {
       updateEvent(editingDate, {
-        ...editingEvent,
-        title: modalTitle,
-        description: modalDescription,
-        time: modalTime,
-        endTime: modalEndTime,
-        isAllDay: modalIsAllDay,
+        ...editingEvent, title: modalTitle, description: modalDescription,
+        time: modalTime, endTime: modalEndTime, isAllDay: modalIsAllDay,
         participantId: modalParticipantId
       });
     }
@@ -59,9 +111,7 @@ export default function SharedCalendarScreen() {
   };
 
   const handleDelete = () => {
-    if (editingEvent && editingDate) {
-      deleteEvent(editingDate, editingEvent.id);
-    }
+    if (editingEvent && editingDate) deleteEvent(editingDate, editingEvent.id);
     setModalVisible(false);
   };
 
@@ -71,29 +121,49 @@ export default function SharedCalendarScreen() {
     const isSelected = selectedDate === day.dateString;
     const dayEvents = events[day.dateString] || [];
     const isToday = day.dateString === todayString; 
+    
+    // On calcule la décoration de la case pour ce jour précis
+    const cellDeco = getCellDecoration(day.dateString, dayEvents);
 
     return (
       <TouchableOpacity 
         key={index} 
-        style={[styles.dayCell, isSelected && styles.dayCellSelected, isToday && styles.dayCellToday]}
+        style={[
+          styles.dayCell, 
+          isSelected && styles.dayCellSelected, 
+          isToday && styles.dayCellToday,
+          cellDeco && { borderColor: cellDeco.borderColor, borderWidth: 1, backgroundColor: `${cellDeco.borderColor}15` } // Fond très très clair
+        ]}
         onPress={() => setSelectedDate(day.dateString)}
         activeOpacity={0.6}
       >
+        {/* Émojis décoratifs aux coins de la case */}
+        {cellDeco && (
+          <>
+            <Text style={styles.decoTopLeft}>{cellDeco.tl}</Text>
+            <Text style={styles.decoBottomRight}>{cellDeco.br}</Text>
+          </>
+        )}
+
         <Text style={[styles.dayNumber, isToday && styles.textBold]}>{day.dayNumber}</Text>
         <View style={styles.pillContainer}>
-          {dayEvents.map((ev: Event, i: number) => (
-             <TouchableOpacity 
-               key={i} 
-               style={[styles.eventPill, { backgroundColor: getMemberColor(ev.participantId) }]}
-               onPress={() => handleEventPress(ev, day.dateString)}
-               activeOpacity={0.7}
-             >
-               {/* On affiche juste le titre, pour ne plus couper le texte */}
-               <Text style={[styles.pillText, getMemberColor(ev.participantId) === '#FFFFFF' ? {color: '#000'} : {}]} numberOfLines={1}>
-                 {ev.title}
-               </Text>
-             </TouchableOpacity>
-          ))}
+          {dayEvents.map((ev: Event, i: number) => {
+             const baseColor = getMemberColor(ev.participantId);
+             const styleData = applyPersonalRules(ev.title, baseColor);
+
+             return (
+               <TouchableOpacity 
+                 key={i} 
+                 style={[styles.eventPill, { backgroundColor: styleData.bg }, styleData.isCustom && styles.customPillBorder]}
+                 onPress={() => handleEventPress(ev, day.dateString)}
+                 activeOpacity={0.7}
+               >
+                 <Text style={[styles.pillText, {color: styleData.text}]} numberOfLines={1}>
+                   {styleData.icon} {ev.title}
+                 </Text>
+               </TouchableOpacity>
+             );
+          })}
         </View>
       </TouchableOpacity>
     );
@@ -105,7 +175,12 @@ export default function SharedCalendarScreen() {
       <View style={styles.headerArea}>
         <View style={styles.topBar}>
           <TouchableOpacity onPress={prevMonth} style={styles.navBtn}><Text style={styles.navBtnText}>&lt;</Text></TouchableOpacity>
-          <Text style={styles.monthTitle}>{currentMonthName}</Text>
+          <View style={styles.titleContainer}>
+            <Text style={styles.monthTitle}>
+              {decorations.left} {currentMonthName} {decorations.right}
+            </Text>
+            {decorations.subtitle ? <Text style={styles.monthSubtitle}>{decorations.subtitle}</Text> : null}
+          </View>
           <TouchableOpacity onPress={nextMonth} style={styles.navBtn}><Text style={styles.navBtnText}>&gt;</Text></TouchableOpacity>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.membersScroll}>
@@ -228,7 +303,9 @@ const styles = StyleSheet.create({
   topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   navBtn: { padding: 10, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 10 },
   navBtnText: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
+  titleContainer: { alignItems: 'center' },
   monthTitle: { fontSize: 24, fontWeight: 'bold', color: '#FFFFFF', textTransform: 'capitalize' },
+  monthSubtitle: { fontSize: 12, color: 'rgba(255,255,255,0.8)', fontStyle: 'italic', marginTop: 2 },
   membersScroll: { flexDirection: 'row' },
   memberBadge: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 10 },
   memberBadgeText: { fontWeight: 'bold', color: '#333' },
@@ -239,15 +316,20 @@ const styles = StyleSheet.create({
   scrollPadding: { paddingBottom: 40 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start' },
   emptyCell: { width: '14.28%', height: 105, padding: 2 },
-  dayCell: { width: '14.28%', height: 105, padding: 2, borderTopWidth: 1, borderColor: '#F1F5F9', alignItems: 'center' },
+  dayCell: { width: '14.28%', height: 105, padding: 2, borderTopWidth: 1, borderColor: '#F1F5F9', alignItems: 'center', overflow: 'hidden' }, // overflow hidden pour pas que ça déborde
   dayCellSelected: { borderWidth: 2, borderColor: '#333', borderRadius: 8 },
   dayCellToday: { backgroundColor: '#F1F5F9' },
-  dayNumber: { fontSize: 13, color: '#333', marginBottom: 4, marginTop: 4 },
+  dayNumber: { fontSize: 13, color: '#333', marginBottom: 4, marginTop: 4, zIndex: 2 },
   textBold: { fontWeight: 'bold' },
   
-  pillContainer: { width: '100%', alignItems: 'center', gap: 3 },
+  // Styles pour les émojis décoratifs dans les coins
+  decoTopLeft: { position: 'absolute', top: 2, left: 2, fontSize: 10, opacity: 0.8 },
+  decoBottomRight: { position: 'absolute', bottom: 2, right: 2, fontSize: 10, opacity: 0.8 },
+  
+  pillContainer: { width: '100%', alignItems: 'center', gap: 3, zIndex: 2 },
   eventPill: { width: '98%', paddingVertical: 4, paddingHorizontal: 2, borderRadius: 4 },
-  pillText: { color: '#333', fontSize: 9, fontWeight: '700', textAlign: 'center' },
+  customPillBorder: { borderWidth: 1, borderColor: 'rgba(0,0,0,0.1)' },
+  pillText: { fontSize: 9, fontWeight: '700', textAlign: 'center' },
   
   formSection: { padding: 20, marginTop: 20, backgroundColor: '#F8FAFC', borderRadius: 16 },
   formLabel: { fontWeight: 'bold', marginBottom: 10, fontSize: 16 },
