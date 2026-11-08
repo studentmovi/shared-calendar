@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Modal, KeyboardAvoidingView, Platform, Switch } from 'react-native';
-import { useSharedCalendar, CalendarDay, Event } from '../hooks/useSharedCalendar';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Modal, KeyboardAvoidingView, Platform, Switch, useColorScheme } from 'react-native';
+import { useSharedCalendar, CalendarDay, Event, Reminder } from '../hooks/useSharedCalendar';
+import { useTranslation } from '../context/LanguageContext';
+import { Ionicons } from '@expo/vector-icons';
 
-// --- MOTEUR DE RÈGLES PREMIUM (Couleurs des pilules d'événements) ---
 const PERSONAL_KEYWORDS_RULES = [
   { keywords: ['pompier', 'feu', 'caserne'], bg: '#DC2626', text: '#FFFFFF', icon: '🚒' },
   { keywords: ['garde', 'astreinte'], bg: '#2563EB', text: '#FFFFFF', icon: '🛡️' },
   { keywords: ['amour', 'resto', 'date'], bg: '#DB2777', text: '#FFFFFF', icon: '💕' },
-  { keywords: ['médecin', 'rdv médical'], bg: '#059669', text: '#FFFFFF', icon: '🩺' }
+  { keywords: ['médecin', 'rdv'], bg: '#059669', text: '#FFFFFF', icon: '🩺' }
 ];
 
 const applyPersonalRules = (title: string, defaultColor: string) => {
@@ -20,142 +21,185 @@ const applyPersonalRules = (title: string, defaultColor: string) => {
   return { bg: defaultColor, text: defaultColor === '#FFFFFF' ? '#000000' : '#FFFFFF', icon: '', isCustom: false };
 };
 
-// --- MOTEUR DE DÉCORATION SAISONNIÈRE (En-tête) ---
 const getMonthDecoration = (monthIndex: number) => {
-  if (monthIndex === 9) return { left: '🕸️', right: '🎃', subtitle: "Joyeux Halloween !" };
-  if (monthIndex === 11) return { left: '🎄', right: '🎁', subtitle: "Période des fêtes" };
-  if (monthIndex === 0) return { left: '🥂', right: '🎆', subtitle: `Bonne Année ${new Date().getFullYear()} !` };
-  if (monthIndex === 1) return { left: '💘', right: '🍫', subtitle: "Mois de l'amour" };
+  if (monthIndex === 9) return { left: '🕸️', right: '🎃', subtitle: "Halloween !" };
+  if (monthIndex === 11) return { left: '🎄', right: '🎁', subtitle: "Fêtes !" };
+  if (monthIndex === 0) return { left: '🥂', right: '🎆', subtitle: `Année ${new Date().getFullYear()} !` };
+  if (monthIndex === 1) return { left: '💘', right: '🍫', subtitle: "Amour" };
   return { left: '', right: '', subtitle: '' };
 };
 
-// --- NOUVEAU : MOTEUR DE DÉCORATION DES CASES DU CALENDRIER ---
 const getCellDecoration = (dateStr: string, eventsForDay: Event[]) => {
-  const d = new Date(dateStr);
-  const month = d.getMonth();
-  const day = d.getDate();
-
+  const d = new Date(dateStr); 
+  const month = d.getMonth(); 
+  const day = d.getDate(); 
   let decoration = null;
-
-  // 1. Fêtes fixes de base (Saint-Valentin, Halloween, Noël, Nouvel An)
+  
   if (month === 1 && day === 14) decoration = { tl: '💘', br: '🌹', borderColor: '#FDA4AF' };
   else if (month === 9 && day === 31) decoration = { tl: '🕸️', br: '🕷️', borderColor: '#FDBA74' };
   else if (month === 11 && (day === 24 || day === 25)) decoration = { tl: '🎄', br: '🎁', borderColor: '#86EFAC' };
   else if ((month === 11 && day === 31) || (month === 0 && day === 1)) decoration = { tl: '🎆', br: '🥂', borderColor: '#FDE047' };
-
-  // 2. Règle Premium personnelle : Si un événement contient "Flavie"
-  const hasCoupleEvent = eventsForDay.some(ev => ev.title.toLowerCase().includes('flavie'));
-  if (hasCoupleEvent) {
-    decoration = { tl: '💕', br: '💕', borderColor: '#FBCFE8' }; // Écrase la fête de base avec des cœurs !
+  
+  if (eventsForDay.some(ev => ev.title.toLowerCase().includes('flavie'))) {
+    decoration = { tl: '💕', br: '💕', borderColor: '#FBCFE8' };
   }
-
   return decoration;
 };
 
 export default function SharedCalendarScreen() {
-  const {
-    events, selectedDate, setSelectedDate, 
-    eventTitle, setEventTitle, eventDescription, setEventDescription,
-    eventTime, setEventTime, eventEndTime, setEventEndTime,
-    isEventAllDay, setIsEventAllDay,
-    selectedParticipantId, setSelectedParticipantId, 
-    handleAddEvent, updateEvent, deleteEvent,
-    monthGrid, currentMonthName, nextMonth, prevMonth,
-    members, appBackgroundColor
+  const { t } = useTranslation();
+  
+  const systemTheme = useColorScheme(); 
+  
+  const { 
+    events, selectedDate, setSelectedDate, handleAddEvent, updateEvent, deleteEvent, 
+    monthGrid, currentMonthName, nextMonth, prevMonth, members, showAlert,
+    theme, appBackgroundColor, numberColor, fabColor 
   } = useSharedCalendar();
 
+  // Détection propre du mode sombre
+  const currentTheme = theme === 'system' ? systemTheme : theme;
+  const isDark = currentTheme === 'dark';
+
   const [isModalVisible, setModalVisible] = useState(false);
-  const [editingEvent, setEditingEvent] = useState<Event | null>(null);
-  const [editingDate, setEditingDate] = useState<string>('');
+  const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
   
-  const [modalTitle, setModalTitle] = useState('');
+  const [modalTitle, setModalTitle] = useState(''); 
   const [modalDescription, setModalDescription] = useState('');
-  const [modalTime, setModalTime] = useState('');
+  const [modalTime, setModalTime] = useState(''); 
   const [modalEndTime, setModalEndTime] = useState('');
+  const [modalEndDate, setModalEndDate] = useState(''); 
   const [modalIsAllDay, setModalIsAllDay] = useState(false);
   const [modalParticipantId, setModalParticipantId] = useState('');
+  
+  const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [tempRemAmount, setTempRemAmount] = useState('15');
+  const [tempRemUnit, setTempRemUnit] = useState('minutes');
 
   const daysOfWeek = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
   const todayDate = new Date();
   const todayString = `${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, '0')}-${String(todayDate.getDate()).padStart(2, '0')}`;
-
-  const displayedMonthIndex = monthGrid.find(d => d.isCurrentMonth) 
-    ? new Date(monthGrid.find(d => d.isCurrentMonth)!.dateString).getMonth() 
-    : todayDate.getMonth();
   
+  const displayedMonthIndex = monthGrid.find((d: CalendarDay) => d.isCurrentMonth) 
+    ? new Date(monthGrid.find((d: CalendarDay) => d.isCurrentMonth)!.dateString).getMonth() 
+    : todayDate.getMonth();
+    
   const decorations = getMonthDecoration(displayedMonthIndex);
-
+  
   const getMemberColor = (id: string) => members.find((m: any) => m.id === id)?.color || '#CCCCCC';
 
-  const handleEventPress = (ev: Event, dateString: string) => {
-    setEditingEvent(ev);
-    setEditingDate(dateString);
-    setModalTitle(ev.title);
-    setModalDescription(ev.description || '');
-    setModalTime(ev.time || '');
-    setModalEndTime(ev.endTime || '');
-    setModalIsAllDay(ev.isAllDay || false);
-    setModalParticipantId(ev.participantId);
+  const openModal = (mode: 'add' | 'edit', ev?: Event, dateString?: string) => {
+    setModalMode(mode);
+    if (mode === 'add') {
+      if (!selectedDate) setSelectedDate(todayString);
+      setModalTitle(''); 
+      setModalDescription(''); 
+      setModalTime(''); 
+      setModalEndTime(''); 
+      setModalEndDate(''); 
+      setModalIsAllDay(false);
+      setModalParticipantId(members[0]?.id || ''); 
+      setReminders([]);
+    } else if (ev && dateString) {
+      setSelectedDate(dateString); 
+      setEditingEventId(ev.id);
+      setModalTitle(ev.title); 
+      setModalDescription(ev.description || ''); 
+      setModalTime(ev.time || ''); 
+      setModalEndTime(ev.endTime || ''); 
+      setModalEndDate(ev.endDate || ''); 
+      setModalIsAllDay(ev.isAllDay || false);
+      setModalParticipantId(ev.participantId); 
+      setReminders(ev.reminders || []);
+    }
     setModalVisible(true);
   };
 
-  const handleSaveEdit = () => {
-    if (editingEvent && editingDate) {
-      updateEvent(editingDate, {
-        ...editingEvent, title: modalTitle, description: modalDescription,
-        time: modalTime, endTime: modalEndTime, isAllDay: modalIsAllDay,
-        participantId: modalParticipantId
-      });
+  const handleAddReminder = () => {
+    if (!tempRemAmount) return;
+    setReminders([...reminders, { amount: tempRemAmount, unit: tempRemUnit }]);
+    setTempRemAmount('');
+  };
+
+  const handleSave = () => {
+    if (!modalTitle.trim()) { 
+      return showAlert(t('error'), t('emptyTitle'), 'error'); 
+    }
+    const eventData = { 
+      title: modalTitle, 
+      description: modalDescription, 
+      time: modalTime, 
+      endTime: modalEndTime, 
+      endDate: modalIsAllDay ? modalEndDate : '', 
+      isAllDay: modalIsAllDay, 
+      participantId: modalParticipantId, 
+      reminders 
+    };
+    
+    if (modalMode === 'add') {
+      handleAddEvent(selectedDate, eventData);
+    } else if (editingEventId) {
+      updateEvent(selectedDate, { ...eventData, id: editingEventId });
     }
     setModalVisible(false);
   };
 
-  const handleDelete = () => {
-    if (editingEvent && editingDate) deleteEvent(editingDate, editingEvent.id);
-    setModalVisible(false);
+  const handleDelete = () => { 
+    if (editingEventId && selectedDate) {
+      deleteEvent(selectedDate, editingEventId); 
+    }
+    setModalVisible(false); 
   };
 
   const renderDayCell = (day: CalendarDay, index: number) => {
-    if (!day.isCurrentMonth) return <View key={index} style={styles.emptyCell} />;
-
-    const isSelected = selectedDate === day.dateString;
+    if (!day.isCurrentMonth) {
+      // Les cases vides s'adaptent aussi au mode sombre
+      return <View key={index} style={[styles.emptyCell, { borderTopWidth: 1, borderColor: isDark ? '#334155' : '#F1F5F9' }]} />;
+    }
+    
+    const isSelected = selectedDate === day.dateString; 
     const dayEvents = events[day.dateString] || [];
     const isToday = day.dateString === todayString; 
-    
-    // On calcule la décoration de la case pour ce jour précis
     const cellDeco = getCellDecoration(day.dateString, dayEvents);
-
+    
     return (
       <TouchableOpacity 
         key={index} 
         style={[
           styles.dayCell, 
-          isSelected && styles.dayCellSelected, 
-          isToday && styles.dayCellToday,
-          cellDeco && { borderColor: cellDeco.borderColor, borderWidth: 1, backgroundColor: `${cellDeco.borderColor}15` } // Fond très très clair
-        ]}
-        onPress={() => setSelectedDate(day.dateString)}
+          { borderColor: isDark ? '#334155' : '#F1F5F9' },
+          isSelected && { borderWidth: 2, borderColor: isDark ? '#FFFFFF' : '#333', borderRadius: 8 },
+          isToday && { backgroundColor: isDark ? '#334155' : '#F1F5F9' },
+          cellDeco && { borderColor: cellDeco.borderColor, borderWidth: 1, backgroundColor: `${cellDeco.borderColor}15` }
+        ]} 
+        onPress={() => setSelectedDate(day.dateString)} 
         activeOpacity={0.6}
       >
-        {/* Émojis décoratifs aux coins de la case */}
         {cellDeco && (
           <>
             <Text style={styles.decoTopLeft}>{cellDeco.tl}</Text>
             <Text style={styles.decoBottomRight}>{cellDeco.br}</Text>
           </>
         )}
-
-        <Text style={[styles.dayNumber, isToday && styles.textBold]}>{day.dayNumber}</Text>
+        
+        {/* CORRECTION DES NUMÉROS: S'ils sont restés "#333333" par défaut, on les force en blanc dans le mode sombre */}
+        <Text style={[
+          styles.dayNumber, 
+          isToday && styles.textBold, 
+          { color: (isDark && numberColor === '#333333') ? '#FFFFFF' : numberColor }
+        ]}>
+          {day.dayNumber}
+        </Text>
+        
         <View style={styles.pillContainer}>
           {dayEvents.map((ev: Event, i: number) => {
-             const baseColor = getMemberColor(ev.participantId);
-             const styleData = applyPersonalRules(ev.title, baseColor);
-
+             const styleData = applyPersonalRules(ev.title, getMemberColor(ev.participantId));
              return (
                <TouchableOpacity 
                  key={i} 
-                 style={[styles.eventPill, { backgroundColor: styleData.bg }, styleData.isCustom && styles.customPillBorder]}
-                 onPress={() => handleEventPress(ev, day.dateString)}
+                 style={[styles.eventPill, { backgroundColor: styleData.bg }, styleData.isCustom && styles.customPillBorder]} 
+                 onPress={() => openModal('edit', ev, day.dateString)} 
                  activeOpacity={0.7}
                >
                  <Text style={[styles.pillText, {color: styleData.text}]} numberOfLines={1}>
@@ -174,125 +218,144 @@ export default function SharedCalendarScreen() {
       
       <View style={styles.headerArea}>
         <View style={styles.topBar}>
-          <TouchableOpacity onPress={prevMonth} style={styles.navBtn}><Text style={styles.navBtnText}>&lt;</Text></TouchableOpacity>
+          <TouchableOpacity onPress={prevMonth} style={styles.navBtn}>
+            <Text style={styles.navBtnText}>&lt;</Text>
+          </TouchableOpacity>
           <View style={styles.titleContainer}>
-            <Text style={styles.monthTitle}>
-              {decorations.left} {currentMonthName} {decorations.right}
-            </Text>
+            <Text style={styles.monthTitle}>{decorations.left} {currentMonthName} {decorations.right}</Text>
             {decorations.subtitle ? <Text style={styles.monthSubtitle}>{decorations.subtitle}</Text> : null}
           </View>
-          <TouchableOpacity onPress={nextMonth} style={styles.navBtn}><Text style={styles.navBtnText}>&gt;</Text></TouchableOpacity>
+          <TouchableOpacity onPress={nextMonth} style={styles.navBtn}>
+            <Text style={styles.navBtnText}>&gt;</Text>
+          </TouchableOpacity>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.membersScroll}>
-          {members.map((member: any) => (
-            <View key={member.id} style={[styles.memberBadge, { backgroundColor: member.color }]}>
-              <Text style={[styles.memberBadgeText, member.color === '#FFFFFF' ? {color: '#000'} : {}]}>{member.name}</Text>
+          {members.map((m: any) => (
+            <View key={m.id} style={[styles.memberBadge, { backgroundColor: m.color }]}>
+              <Text style={[styles.memberBadgeText, m.color === '#FFFFFF' ? {color: '#000'} : {}]}>{m.name}</Text>
             </View>
           ))}
         </ScrollView>
       </View>
 
-      <View style={styles.calendarArea}>
+      <View style={[styles.calendarArea, { backgroundColor: isDark ? '#1E293B' : '#FFFFFF' }]}>
         <View style={styles.daysRow}>
-          {daysOfWeek.map((day, i) => <Text key={i} style={styles.dayOfWeekText}>{day}</Text>)}
+          {daysOfWeek.map((day, i) => (
+            <Text key={i} style={[styles.dayOfWeekText, { color: isDark ? '#94A3B8' : '#94A3B8' }]}>{day}</Text>
+          ))}
         </View>
-        
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollPadding}>
           <View style={styles.grid}>
             {monthGrid.map((day: CalendarDay, index: number) => renderDayCell(day, index))}
           </View>
-
-          {selectedDate !== '' && (
-            <View style={styles.formSection}>
-              <Text style={styles.formLabel}>Ajouter un événement le {selectedDate}</Text>
-              
-              <TextInput style={styles.input} placeholder="Titre de l'événement..." value={eventTitle} onChangeText={setEventTitle} />
-              <TextInput style={[styles.input, { height: 80, textAlignVertical: 'top' }]} placeholder="Détails, adresse, notes..." value={eventDescription} onChangeText={setEventDescription} multiline />
-              
-              <View style={styles.timeRow}>
-                  <View style={styles.switchContainer}>
-                      <Text style={styles.subLabel}>Toute la journée</Text>
-                      <Switch value={isEventAllDay} onValueChange={setIsEventAllDay} />
-                  </View>
-                  {!isEventAllDay && (
-                      <View style={styles.timesContainer}>
-                        <TextInput style={[styles.input, { flex: 1, marginBottom: 0 }]} placeholder="Début (14:30)" value={eventTime} onChangeText={setEventTime} />
-                        <TextInput style={[styles.input, { flex: 1, marginBottom: 0 }]} placeholder="Fin (15:30)" value={eventEndTime} onChangeText={setEventEndTime} />
-                      </View>
-                  )}
-              </View>
-
-              <Text style={[styles.subLabel, {marginTop: 10}]}>Attribuer à :</Text>
-              <ScrollView horizontal style={styles.formParticipantScroll}>
-                {members.map((m: any) => (
-                  <TouchableOpacity
-                    key={m.id}
-                    style={[styles.formParticipantBtn, { backgroundColor: m.color }, selectedParticipantId === m.id && styles.formParticipantBtnSelected]}
-                    onPress={() => setSelectedParticipantId(m.id)}
-                  >
-                    <Text style={m.color === '#FFFFFF' ? {color: '#000', fontWeight:'bold'} : {fontWeight:'bold', color:'#FFF'}}>{m.name}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-              <TouchableOpacity style={styles.addBtn} onPress={handleAddEvent}>
-                <Text style={styles.addBtnText}>Ajouter au calendrier</Text>
-              </TouchableOpacity>
-            </View>
-          )}
         </ScrollView>
+      </View>
+
+      <View style={styles.premiumBottomAction}>
+        {/* CORRECTION DU BOUTON AJOUT: Ajout d'une bordure subtile en mode sombre pour qu'il se détache */}
+        <TouchableOpacity 
+          style={[
+            styles.premiumAddBtn, 
+            { backgroundColor: fabColor },
+            isDark && fabColor === '#0F172A' ? { borderWidth: 1, borderColor: '#334155' } : {}
+          ]} 
+          onPress={() => openModal('add')} 
+          activeOpacity={0.8}
+        >
+          <Ionicons name="add" size={22} color="#FFF" style={{ marginRight: 6 }} />
+          <Text style={styles.premiumAddBtnText}>{t('addEvent')}</Text>
+        </TouchableOpacity>
       </View>
 
       <Modal visible={isModalVisible} transparent={true} animationType="slide">
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalHeader}>Détails de l'événement</Text>
+          
+          <ScrollView contentContainerStyle={styles.modalScrollContent} style={[styles.modalContainer, { backgroundColor: isDark ? '#0F172A' : '#FFFFFF' }]}>
             
-            <TextInput style={styles.input} placeholder="Titre" value={modalTitle} onChangeText={setModalTitle} />
-            <TextInput style={[styles.input, { height: 100, textAlignVertical: 'top' }]} placeholder="Détails, notes importées..." value={modalDescription} onChangeText={setModalDescription} multiline />
+            <View style={styles.modalHeaderRow}>
+              <Text style={[styles.modalHeader, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                {modalMode === 'add' ? t('addEvent') : t('editEvent')}
+              </Text>
+              <TouchableOpacity onPress={() => setModalVisible(false)}>
+                <Ionicons name="close-circle" size={32} color="#94A3B8" />
+              </TouchableOpacity>
+            </View>
+            
+            <TextInput 
+              style={[styles.input, isDark && styles.inputDark]} 
+              placeholderTextColor={isDark ? '#94A3B8' : '#94A3B8'} 
+              placeholder={t('titlePlaceholder')} 
+              value={modalTitle} 
+              onChangeText={setModalTitle} 
+            />
+            <TextInput 
+              style={[styles.input, isDark && styles.inputDark, { height: 80, textAlignVertical: 'top' }]} 
+              placeholderTextColor={isDark ? '#94A3B8' : '#94A3B8'} 
+              placeholder={t('descPlaceholder')} 
+              value={modalDescription} 
+              onChangeText={setModalDescription} 
+              multiline 
+            />
 
-            <View style={styles.timeRow}>
+            <View style={[styles.timeSection, isDark && styles.timeSectionDark]}>
                 <View style={styles.switchContainer}>
-                    <Text style={styles.subLabel}>Toute la journée</Text>
-                    <Switch value={modalIsAllDay} onValueChange={setModalIsAllDay} />
+                  <Text style={[styles.subLabel, {color: isDark ? '#FFF' : '#333'}]}>{t('allDay')}</Text>
+                  <Switch value={modalIsAllDay} onValueChange={setModalIsAllDay} />
                 </View>
-                {!modalIsAllDay && (
+                {!modalIsAllDay ? (
                     <View style={styles.timesContainer}>
-                        <TextInput style={[styles.input, { flex: 1, marginBottom: 0 }]} placeholder="Début" value={modalTime} onChangeText={setModalTime} />
-                        <TextInput style={[styles.input, { flex: 1, marginBottom: 0 }]} placeholder="Fin" value={modalEndTime} onChangeText={setModalEndTime} />
+                        <TextInput style={[styles.input, isDark && styles.inputDark, { flex: 1, marginBottom: 0 }]} placeholderTextColor={isDark ? '#94A3B8' : '#94A3B8'} placeholder={t('start')} value={modalTime} onChangeText={setModalTime} />
+                        <TextInput style={[styles.input, isDark && styles.inputDark, { flex: 1, marginBottom: 0 }]} placeholderTextColor={isDark ? '#94A3B8' : '#94A3B8'} placeholder={t('end')} value={modalEndTime} onChangeText={setModalEndTime} />
                     </View>
+                ) : (
+                    <TextInput style={[styles.input, isDark && styles.inputDark, { marginTop: 10 }]} placeholderTextColor={isDark ? '#94A3B8' : '#94A3B8'} placeholder={t('endDate')} value={modalEndDate} onChangeText={setModalEndDate} />
                 )}
             </View>
 
-            <Text style={[styles.subLabel, {marginTop: 15}]}>Attribuer à :</Text>
-            <ScrollView horizontal style={styles.formParticipantScroll}>
+            <Text style={[styles.subLabel, {marginTop: 15, marginBottom: 10, color: isDark ? '#FFF' : '#333'}]}>{t('reminders')}</Text>
+            {reminders.map((rem, i) => (
+              <View key={i} style={styles.reminderRow}>
+                <Text style={styles.reminderBadge}>{rem.amount} {t(rem.unit as keyof typeof t)} {t('before')}</Text>
+                <TouchableOpacity onPress={() => setReminders(reminders.filter((_, idx) => idx !== i))}><Ionicons name="trash" size={20} color="#EF4444" /></TouchableOpacity>
+              </View>
+            ))}
+            
+            <View style={styles.addReminderRow}>
+              <TextInput style={[styles.remInput, isDark && styles.inputDark]} keyboardType="numeric" value={tempRemAmount} onChangeText={setTempRemAmount} placeholderTextColor={isDark ? '#94A3B8' : '#94A3B8'} placeholder="15" />
+              <TouchableOpacity style={[styles.remUnitBtn, isDark && styles.remUnitBtnDark, tempRemUnit === 'minutes' && styles.remUnitActive]} onPress={() => setTempRemUnit('minutes')}>
+                <Text style={[tempRemUnit === 'minutes' ? styles.remTextActive : {color: isDark ? '#FFF' : '#333'}]}>{t('minutes')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.remUnitBtn, isDark && styles.remUnitBtnDark, tempRemUnit === 'hours' && styles.remUnitActive]} onPress={() => setTempRemUnit('hours')}>
+                <Text style={[tempRemUnit === 'hours' ? styles.remTextActive : {color: isDark ? '#FFF' : '#333'}]}>{t('hours')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.remUnitBtn, isDark && styles.remUnitBtnDark, tempRemUnit === 'days' && styles.remUnitActive]} onPress={() => setTempRemUnit('days')}>
+                <Text style={[tempRemUnit === 'days' ? styles.remTextActive : {color: isDark ? '#FFF' : '#333'}]}>{t('days')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.remAddBtn} onPress={handleAddReminder}><Ionicons name="add" size={20} color="#FFF" /></TouchableOpacity>
+            </View>
+
+            <Text style={[styles.subLabel, {marginTop: 15, color: isDark ? '#FFF' : '#333'}]}>{t('assignTo')}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.formParticipantScroll}>
                 {members.map((m: any) => (
-                  <TouchableOpacity
-                    key={m.id}
-                    style={[styles.formParticipantBtn, { backgroundColor: m.color }, modalParticipantId === m.id && styles.formParticipantBtnSelected]}
-                    onPress={() => setModalParticipantId(m.id)}
-                  >
+                  <TouchableOpacity key={m.id} style={[styles.formParticipantBtn, { backgroundColor: m.color }, modalParticipantId === m.id && {borderColor: isDark ? '#FFF' : '#333'}]} onPress={() => setModalParticipantId(m.id)}>
                     <Text style={m.color === '#FFFFFF' ? {color: '#000', fontWeight:'bold'} : {fontWeight:'bold', color:'#FFF'}}>{m.name}</Text>
                   </TouchableOpacity>
                 ))}
             </ScrollView>
 
             <View style={styles.modalActionRow}>
-              <TouchableOpacity style={[styles.modalActionBtn, { backgroundColor: '#0F172A' }]} onPress={handleSaveEdit}>
-                <Text style={styles.addBtnText}>Sauvegarder</Text>
+              <TouchableOpacity style={[styles.modalActionBtn, { backgroundColor: fabColor }]} onPress={handleSave}>
+                <Text style={styles.addBtnText}>{modalMode === 'add' ? t('createEvent') : t('save')}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.modalActionBtn, { backgroundColor: '#EF4444' }]} onPress={handleDelete}>
-                <Text style={styles.addBtnText}>Supprimer</Text>
-              </TouchableOpacity>
+              {modalMode === 'edit' && (
+                <TouchableOpacity style={[styles.modalActionBtn, { backgroundColor: '#EF4444', flex: 0.4 }]} onPress={handleDelete}>
+                  <Ionicons name="trash" size={20} color="#FFF" />
+                </TouchableOpacity>
+              )}
             </View>
-            
-            <TouchableOpacity style={styles.cancelBtn} onPress={() => setModalVisible(false)}>
-              <Text style={styles.cancelBtnText}>Fermer</Text>
-            </TouchableOpacity>
-
-          </View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
-
     </View>
   );
 }
@@ -310,45 +373,54 @@ const styles = StyleSheet.create({
   memberBadge: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 10 },
   memberBadgeText: { fontWeight: 'bold', color: '#333' },
   
-  calendarArea: { flex: 1, backgroundColor: '#FFFFFF', borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingTop: 20, paddingHorizontal: 10 },
+  calendarArea: { flex: 1, borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingTop: 20, paddingHorizontal: 10 },
   daysRow: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 10 },
   dayOfWeekText: { fontSize: 14, fontWeight: '600', color: '#94A3B8', width: '14.28%', textAlign: 'center' },
-  scrollPadding: { paddingBottom: 40 },
+  scrollPadding: { paddingBottom: 110 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start' },
   emptyCell: { width: '14.28%', height: 105, padding: 2 },
-  dayCell: { width: '14.28%', height: 105, padding: 2, borderTopWidth: 1, borderColor: '#F1F5F9', alignItems: 'center', overflow: 'hidden' }, // overflow hidden pour pas que ça déborde
-  dayCellSelected: { borderWidth: 2, borderColor: '#333', borderRadius: 8 },
-  dayCellToday: { backgroundColor: '#F1F5F9' },
-  dayNumber: { fontSize: 13, color: '#333', marginBottom: 4, marginTop: 4, zIndex: 2 },
+  dayCell: { width: '14.28%', height: 105, padding: 2, borderTopWidth: 1, alignItems: 'center', overflow: 'hidden' },
+  dayNumber: { fontSize: 13, marginBottom: 4, marginTop: 4, zIndex: 2 },
   textBold: { fontWeight: 'bold' },
-  
-  // Styles pour les émojis décoratifs dans les coins
   decoTopLeft: { position: 'absolute', top: 2, left: 2, fontSize: 10, opacity: 0.8 },
   decoBottomRight: { position: 'absolute', bottom: 2, right: 2, fontSize: 10, opacity: 0.8 },
-  
   pillContainer: { width: '100%', alignItems: 'center', gap: 3, zIndex: 2 },
   eventPill: { width: '98%', paddingVertical: 4, paddingHorizontal: 2, borderRadius: 4 },
   customPillBorder: { borderWidth: 1, borderColor: 'rgba(0,0,0,0.1)' },
   pillText: { fontSize: 9, fontWeight: '700', textAlign: 'center' },
   
-  formSection: { padding: 20, marginTop: 20, backgroundColor: '#F8FAFC', borderRadius: 16 },
-  formLabel: { fontWeight: 'bold', marginBottom: 10, fontSize: 16 },
-  input: { backgroundColor: '#FFF', padding: 14, borderRadius: 10, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0' },
-  timeRow: { flexDirection: 'column', gap: 10, marginBottom: 10 },
-  switchContainer: { flexDirection: 'row', alignItems: 'center', gap: 10, alignSelf: 'flex-start' },
-  timesContainer: { flexDirection: 'row', gap: 10 },
-  formParticipantScroll: { marginBottom: 15, flexDirection: 'row' },
-  formParticipantBtn: { paddingHorizontal: 15, paddingVertical: 10, borderRadius: 12, marginRight: 10, borderWidth: 2, borderColor: 'transparent' },
-  formParticipantBtnSelected: { borderColor: '#333' },
-  addBtn: { backgroundColor: '#0F172A', padding: 16, borderRadius: 12, alignItems: 'center' },
-  addBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 15 },
-  subLabel: { fontSize: 14, fontWeight: '600', color: '#333' },
+  premiumBottomAction: { position: 'absolute', bottom: 25, width: '100%', alignItems: 'center', zIndex: 10 },
+  premiumAddBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 24, borderRadius: 30, elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 8 },
+  premiumAddBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700', letterSpacing: 0.3 },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#FFFFFF', padding: 24, borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingBottom: 50 },
-  modalHeader: { fontSize: 20, fontWeight: 'bold', marginBottom: 20, color: '#0F172A' },
-  modalActionRow: { flexDirection: 'row', gap: 10, marginTop: 10 },
-  modalActionBtn: { flex: 1, padding: 16, borderRadius: 12, alignItems: 'center' },
-  cancelBtn: { marginTop: 15, alignItems: 'center', padding: 10 },
-  cancelBtnText: { color: '#94A3B8', fontWeight: 'bold', fontSize: 16 }
+  modalContainer: { borderTopLeftRadius: 30, borderTopRightRadius: 30, maxHeight: '90%' },
+  modalScrollContent: { padding: 24, paddingBottom: 50 },
+  modalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  modalHeader: { fontSize: 20, fontWeight: 'bold' },
+  
+  input: { backgroundColor: '#F8FAFC', color: '#0F172A', padding: 14, borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: '#E2E8F0', fontSize: 15 },
+  inputDark: { backgroundColor: '#1E293B', color: '#FFFFFF', borderColor: '#334155' },
+  
+  timeSection: { backgroundColor: '#F1F5F9', padding: 15, borderRadius: 12, marginBottom: 15 },
+  timeSectionDark: { backgroundColor: '#1E293B' },
+  switchContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  timesContainer: { flexDirection: 'row', gap: 10, marginTop: 10 },
+  subLabel: { fontSize: 14, fontWeight: '600', marginBottom: 8 },
+  
+  reminderRow: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#FEF2F2', padding: 12, borderRadius: 10, marginBottom: 10, alignItems: 'center' },
+  reminderBadge: { color: '#DC2626', fontWeight: 'bold' },
+  addReminderRow: { flexDirection: 'row', gap: 8, marginBottom: 25 },
+  remInput: { flex: 1, backgroundColor: '#F1F5F9', borderRadius: 10, paddingHorizontal: 10, textAlign: 'center', fontSize: 16 },
+  remUnitBtn: { paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#F1F5F9', borderRadius: 10, justifyContent: 'center' },
+  remUnitBtnDark: { backgroundColor: '#1E293B' },
+  remUnitActive: { backgroundColor: '#3B82F6' },
+  remTextActive: { color: '#FFF', fontWeight: 'bold' },
+  remAddBtn: { backgroundColor: '#10B981', padding: 12, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  
+  formParticipantScroll: { marginBottom: 20, flexDirection: 'row' },
+  formParticipantBtn: { paddingHorizontal: 15, paddingVertical: 10, borderRadius: 12, marginRight: 10, borderWidth: 2, borderColor: 'transparent' },
+  modalActionRow: { flexDirection: 'row', gap: 10 },
+  modalActionBtn: { flex: 1, padding: 16, borderRadius: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 },
+  addBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 }
 });
