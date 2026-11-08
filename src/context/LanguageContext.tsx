@@ -32,7 +32,10 @@ const dictionary = {
     ok: 'OK', before: 'avant', 
     appearance: 'Apparence & Couleurs', theme: 'Thème', themeSystem: 'Système', themeLight: 'Clair', themeDark: 'Sombre',
     appBgColor: 'Fond de l\'application', numberColor: 'Numéros du calendrier', fabColor: 'Bouton Ajouter',
-    selectColor: 'Choisir la couleur', eventsColorHint: 'Note : La couleur des cartes d\'événements correspond à la couleur attribuée à chaque membre ci-dessous.'
+    selectColor: 'Choisir la couleur', eventsColorHint: 'Note : La couleur des cartes d\'événements correspond à la couleur attribuée à chaque membre ci-dessous.',
+    // TEXTES DE MISE A JOUR
+    checkUpdate: 'Vérifier les mises à jour', updateAvailable: 'Mise à jour trouvée ! Téléchargement...',
+    updateReady: 'Mise à jour prête ! Redémarrage...', upToDateApp: 'L\'application est déjà à jour.', updateError: 'Erreur lors de la vérification.'
   },
   en: {
     agenda: 'Agenda', settings: 'Settings', addEvent: 'Add Event',
@@ -65,7 +68,10 @@ const dictionary = {
     ok: 'OK', before: 'before',
     appearance: 'Appearance & Colors', theme: 'Theme', themeSystem: 'System', themeLight: 'Light', themeDark: 'Dark',
     appBgColor: 'App Background', numberColor: 'Calendar Numbers', fabColor: 'Add Button',
-    selectColor: 'Select Color', eventsColorHint: 'Note: Event card colors are based on the color assigned to each member below.'
+    selectColor: 'Select Color', eventsColorHint: 'Note: Event card colors are based on the color assigned to each member below.',
+    // TEXTES DE MISE A JOUR
+    checkUpdate: 'Check for updates', updateAvailable: 'Update found! Downloading...',
+    updateReady: 'Update ready! Restarting...', upToDateApp: 'App is already up to date.', updateError: 'Error checking for updates.'
   }
 };
 
@@ -74,6 +80,7 @@ export const LanguageContext = createContext<any>(null);
 export const LanguageProvider = ({ children }: { children: React.ReactNode }) => {
   const [lang, setLang] = useState<'fr' | 'en'>('fr');
   const t = (key: keyof typeof dictionary['fr']) => dictionary[lang][key] || key;
+
   return (
     <LanguageContext.Provider value={{ lang, setLang, t }}>
       {children}
