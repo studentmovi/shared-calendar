@@ -1,7 +1,8 @@
 import { initializeApp } from 'firebase/app';
 import { initializeFirestore, persistentLocalCache } from 'firebase/firestore';
-import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
+import { getAuth, initializeAuth, getReactNativePersistence } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
 const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
@@ -14,12 +15,18 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-// NOUVEAU : Initialisation de l'authentification avec mémorisation de session locale
-export const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(AsyncStorage)
-});
+// PROTECTION MULTI-PLATEFORME : 
+// Firebase utilise getAuth classique sur le Web, et la persistance locale (AsyncStorage) sur Mobile.
+let authAction;
+if (Platform.OS === 'web') {
+  authAction = getAuth(app);
+} else {
+  authAction = initializeAuth(app, {
+    persistence: getReactNativePersistence ? getReactNativePersistence(AsyncStorage) : undefined
+  });
+}
 
-// Force Firebase à envoyer les mails (vérification, reset mdp) en Français
+export const auth = authAction;
 auth.languageCode = 'fr'; 
 
 export const db = initializeFirestore(app, {
