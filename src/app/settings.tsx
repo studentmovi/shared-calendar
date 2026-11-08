@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Share, Modal } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Share, Modal, Platform } from 'react-native';
 import { useSharedCalendar } from '../hooks/useSharedCalendar';
 import Constants from 'expo-constants';
 import { signOut, sendPasswordResetEmail, deleteUser } from 'firebase/auth';
@@ -8,6 +8,7 @@ import { auth, db } from '../config/firebase';
 import Toast from 'react-native-toast-message';
 import ColorPicker from 'react-native-wheel-color-picker';
 import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard'; // Import du presse-papier
 
 const APP_COLORS = ['#FF4D4D', '#F97316', '#10B981', '#3B82F6', '#8B5CF6', '#1E293B'];
 const MEMBER_COLORS = ['#FFFFFF', '#FBCFE8', '#FDE047', '#67E8F9', '#FDBA74', '#D9F99D', '#E9D5FF'];
@@ -56,12 +57,23 @@ export default function SettingsScreen() {
   };
 
   const handleShareFamilyCode = async () => {
-    try {
-      await Share.share({
-        message: `Rejoins mon agenda partagé sur Syncro ! Télécharge l'app et utilise le code de famille : ${familyCode}`,
+    const shareMessage = `Rejoins mon agenda partagé sur Syncro ! Télécharge l'app et utilise le code de famille : ${familyCode}`;
+
+    if (Platform.OS === 'web') {
+      // Comportement PC / Navigateur : Copier dans le presse-papier
+      await Clipboard.setStringAsync(shareMessage);
+      Toast.show({ 
+        type: 'success', 
+        text1: 'Copié ! 📋', 
+        text2: 'Le message et le code ont été copiés dans le presse-papier.' 
       });
-    } catch (error) {
-      Toast.show({ type: 'error', text1: 'Erreur', text2: 'Impossible de partager le code.' });
+    } else {
+      // Comportement Mobile (iOS/Android) : Menu de partage natif
+      try {
+        await Share.share({ message: shareMessage });
+      } catch (error) {
+        Toast.show({ type: 'error', text1: 'Erreur', text2: 'Impossible de partager le code.' });
+      }
     }
   };
 
@@ -124,7 +136,8 @@ export default function SettingsScreen() {
           <View style={styles.codeContainer}>
             <Text style={styles.codeText}>{familyCode}</Text>
             <TouchableOpacity style={styles.shareBtn} onPress={handleShareFamilyCode}>
-              <Text style={styles.shareBtnText}>Partager</Text>
+              {/* Le texte du bouton s'adapte à la plateforme */}
+              <Text style={styles.shareBtnText}>{Platform.OS === 'web' ? 'Copier' : 'Partager'}</Text>
             </TouchableOpacity>
           </View>
           
@@ -192,7 +205,6 @@ export default function SettingsScreen() {
             )}
           </View>
 
-          {/* Roue chromatique enfermée dans un conteneur rigide (overflow: hidden) pour que rien ne dépasse */}
           {showColorPicker && (
             <View style={styles.pickerWrapper}>
               <Text style={styles.pickerHint}>Choisissez votre couleur personnalisée :</Text>
@@ -210,21 +222,24 @@ export default function SettingsScreen() {
           )}
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Importer le téléphone</Text>
-          <Text style={styles.hint}>Choisissez à qui attribuer les événements :</Text>
-          <View style={styles.importList}>
-            {members.map((m: any) => (
-              <TouchableOpacity key={m.id} style={[styles.importBtn, { backgroundColor: m.color }]} onPress={() => importDeviceEvents(m.id)} disabled={isImporting}>
-                {isImporting ? (
-                  <ActivityIndicator color={(m.color === '#FFFFFF' ? '#000000' : '#FFFFFF') as string} />
-                ) : (
-                  <Text style={[styles.importBtnText, m.color === '#FFFFFF' ? {color: '#000'} : {}]}>Importer pour {m.name}</Text>
-                )}
-              </TouchableOpacity>
-            ))}
+        {/* Le bouton d'importation du calendrier natif n'est pertinent que sur mobile, on peut le masquer sur PC */}
+        {Platform.OS !== 'web' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Importer le téléphone</Text>
+            <Text style={styles.hint}>Choisissez à qui attribuer les événements :</Text>
+            <View style={styles.importList}>
+              {members.map((m: any) => (
+                <TouchableOpacity key={m.id} style={[styles.importBtn, { backgroundColor: m.color }]} onPress={() => importDeviceEvents(m.id)} disabled={isImporting}>
+                  {isImporting ? (
+                    <ActivityIndicator color={(m.color === '#FFFFFF' ? '#000000' : '#FFFFFF') as string} />
+                  ) : (
+                    <Text style={[styles.importBtnText, m.color === '#FFFFFF' ? {color: '#000'} : {}]}>Importer pour {m.name}</Text>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
-        </View>
+        )}
 
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
           <Text style={styles.logoutBtnText}>Se déconnecter</Text>
@@ -261,7 +276,6 @@ export default function SettingsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
-  // Marge de bas de page encore plus grande (140) pour passer largement au-dessus de la barre Android
   scrollContent: { padding: 20, paddingTop: 60, paddingBottom: 140 },
   headerTitle: { fontSize: 32, fontWeight: 'bold', color: '#0F172A', marginBottom: 30 },
   section: { backgroundColor: '#FFFFFF', padding: 20, borderRadius: 16, marginBottom: 20, elevation: 2 },
@@ -283,21 +297,16 @@ const styles = StyleSheet.create({
   colorSquare: { width: 36, height: 36, borderRadius: 8, borderWidth: 3, borderColor: '#E2E8F0' },
   colorSquareSelected: { borderColor: '#0F172A' },
   customColorBtn: { width: 36, height: 36, borderRadius: 8, borderWidth: 1, borderColor: '#E2E8F0', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC' },
-  
-  // Style rigide pour empêcher tout débordement de la roue
   pickerWrapper: { marginTop: 15, borderTopWidth: 1, borderTopColor: '#F1F5F9', paddingTop: 10, alignItems: 'center' },
   pickerHint: { fontSize: 12, color: '#64748B', marginBottom: 8, fontStyle: 'italic', alignSelf: 'flex-start' },
   pickerContainer: { width: '100%', height: 180, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
-
   membersList: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   memberBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0' },
   memberBadgeText: { fontWeight: 'bold', color: '#333' },
   input: { backgroundColor: '#F1F5F9', padding: 14, borderRadius: 10, marginBottom: 15, borderWidth: 1, borderColor: '#E2E8F0' },
-  
   actionRow: { flexDirection: 'row', gap: 10, marginTop: 5 },
   actionBtn: { flex: 1, padding: 12, borderRadius: 10, alignItems: 'center' },
   actionBtnText: { color: '#FFF', fontWeight: 'bold' },
-  
   importList: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   importBtn: { paddingHorizontal: 15, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', minWidth: 100, alignItems: 'center', justifyContent: 'center' },
   importBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 13 },
@@ -305,7 +314,6 @@ const styles = StyleSheet.create({
   logoutBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
   versionContainer: { alignItems: 'center', paddingVertical: 20 },
   versionText: { color: '#94A3B8', fontSize: 14, fontWeight: 'bold', letterSpacing: 1 },
-  
   modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalContent: { backgroundColor: '#FFFFFF', width: '100%', borderRadius: 24, padding: 25, elevation: 10 },
   modalIconContainer: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#FEE2E2', justifyContent: 'center', alignItems: 'center', alignSelf: 'center', marginBottom: 20 },
