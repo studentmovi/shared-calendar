@@ -6,11 +6,15 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
 import Toast from 'react-native-toast-message';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import LoadingScreen from '../components/LoadingScreen';
 import AuthScreen from '../components/AuthScreen';
 
 function MainTabs() {
+  // Récupère dynamiquement les marges de sécurité du téléphone (encoche en haut, barre de navigation en bas)
+  const insets = useSafeAreaInsets();
+
   return (
     <Tabs screenOptions={{
       headerShown: false,
@@ -18,9 +22,9 @@ function MainTabs() {
         backgroundColor: '#FFFFFF', 
         borderTopWidth: 1, 
         borderTopColor: '#E2E8F0', 
-        // Hauteur et rembourrage optimisés pour passer au-dessus de la barre Android
-        height: 65,
-        paddingBottom: 8,
+        // La hauteur s'adapte EXACTEMENT à la taille de la barre système de n'importe quel Android/iPhone
+        height: 60 + insets.bottom,
+        paddingBottom: 8 + insets.bottom,
         paddingTop: 8,
       },
       tabBarActiveTintColor: '#FF4D4D',
