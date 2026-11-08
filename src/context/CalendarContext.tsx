@@ -9,11 +9,7 @@ import { useTranslation } from './LanguageContext';
 import { Ionicons } from '@expo/vector-icons';
 
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({ 
-    shouldShowAlert: true, 
-    shouldPlaySound: true, 
-    shouldSetBadge: true 
-  }),
+  handleNotification: async () => ({ shouldShowAlert: true, shouldPlaySound: true, shouldSetBadge: true }),
 });
 
 export interface Reminder { amount: string; unit: string; }
@@ -21,6 +17,7 @@ export interface Reminder { amount: string; unit: string; }
 export interface Event {
   id: string; title: string; participantId: string; description?: string; time?: string;
   endTime?: string; endDate?: string; isAllDay?: boolean; date?: string; reminders?: Reminder[];
+  spanStatus?: 'single' | 'start' | 'middle' | 'end'; // NOUVEAU: Pour la gestion d'affichage continu
 }
 
 export interface CalendarDay { dateString: string; dayNumber: string; isCurrentMonth: boolean; }
@@ -29,6 +26,28 @@ export interface Member { id: string; name: string; color: string; }
 const INITIAL_MEMBERS: Member[] = [ { id: '1', name: 'You', color: '#FFFFFF' } ];
 
 export const CalendarContext = createContext<any>(null);
+
+// UTILITAIRE : Trouver toutes les dates entre deux jours
+const getDatesInRange = (startStr: string, endStr: string) => {
+  if (!startStr || !endStr) return [startStr || endStr];
+  const dates = [];
+  const [sY, sM, sD] = startStr.split('-').map(Number);
+  const [eY, eM, eD] = endStr.split('-').map(Number);
+  
+  if (!sY || !eY) return [startStr];
+  const currentDate = new Date(sY, sM - 1, sD);
+  const endDate = new Date(eY, eM - 1, eD);
+  
+  if (endDate < currentDate) return [startStr]; 
+  while (currentDate <= endDate) {
+    const y = currentDate.getFullYear();
+    const m = String(currentDate.getMonth() + 1).padStart(2, '0');
+    const d = String(currentDate.getDate()).padStart(2, '0');
+    dates.push(`${y}-${m}-${d}`);
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+  return dates;
+};
 
 export const CalendarProvider = ({ children, familyId }: { children: ReactNode, familyId: string }) => {
   const { t } = useTranslation();
@@ -40,7 +59,6 @@ export const CalendarProvider = ({ children, familyId }: { children: ReactNode, 
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [isImporting, setIsImporting] = useState<boolean>(false);
   
-  // VARIABLES DE PERSONNALISATION
   const [theme, setTheme] = useState<'system' | 'light' | 'dark'>('system');
   const [appBackgroundColor, setAppBackgroundColor] = useState<string>('#FF4D4D');
   const [numberColor, setNumberColor] = useState<string>('#333333');
@@ -52,22 +70,38 @@ export const CalendarProvider = ({ children, familyId }: { children: ReactNode, 
     setAlertConfig({ visible: true, title, message, type });
   };
 
-  // Chargement des événements
+  // NOUVEAU: Répartition intelligente des événements sur plusieurs jours
   useEffect(() => {
     if (!familyId) return;
     const unsubscribe = onSnapshot(collection(db, 'families', familyId, 'events'), (snapshot) => {
       const cloudEvents: Record<string, Event[]> = {};
+      
       snapshot.forEach((docSnap) => {
         const data = docSnap.data();
-        if (!cloudEvents[data.date]) cloudEvents[data.date] = [];
-        cloudEvents[data.date].push({ id: docSnap.id, ...data } as Event);
+        const ev = { id: docSnap.id, ...data } as Event;
+        
+        if (data.isAllDay && data.endDate) {
+          const range = getDatesInRange(data.date, data.endDate);
+          range.forEach((dStr, index) => {
+            if (!cloudEvents[dStr]) cloudEvents[dStr] = [];
+            let spanStatus: 'single' | 'start' | 'middle' | 'end' = 'middle';
+            
+            if (range.length === 1) spanStatus = 'single';
+            else if (index === 0) spanStatus = 'start';
+            else if (index === range.length - 1) spanStatus = 'end';
+            
+            cloudEvents[dStr].push({ ...ev, spanStatus });
+          });
+        } else {
+          if (!cloudEvents[data.date]) cloudEvents[data.date] = [];
+          cloudEvents[data.date].push({ ...ev, spanStatus: 'single' });
+        }
       });
       setEvents(cloudEvents); 
     });
     return () => unsubscribe(); 
   }, [familyId]);
 
-  // Chargement des paramètres visuels depuis Firebase
   useEffect(() => {
     if (!familyId) return;
     const unsubscribe = onSnapshot(doc(db, 'families', familyId), (docSnap) => {
@@ -79,13 +113,7 @@ export const CalendarProvider = ({ children, familyId }: { children: ReactNode, 
         if (data.numberColor) setNumberColor(data.numberColor);
         if (data.fabColor) setFabColor(data.fabColor);
       } else {
-        setDoc(doc(db, 'families', familyId), { 
-          members: INITIAL_MEMBERS, 
-          theme: 'system',
-          appBackgroundColor: '#FF4D4D',
-          numberColor: '#333333',
-          fabColor: '#0F172A'
-        });
+        setDoc(doc(db, 'families', familyId), { members: INITIAL_MEMBERS, theme: 'system', appBackgroundColor: '#FF4D4D', numberColor: '#333333', fabColor: '#0F172A' });
       }
     });
     return () => unsubscribe();
@@ -98,10 +126,7 @@ export const CalendarProvider = ({ children, familyId }: { children: ReactNode, 
         if (existingStatus !== 'granted') await Notifications.requestPermissionsAsync();
         if (Platform.OS === 'android') {
           try { 
-            await Notifications.setNotificationChannelAsync('default', { 
-              name: 'default', importance: Notifications.AndroidImportance.MAX, 
-              vibrationPattern: [0, 250, 250, 250], lightColor: '#FF231F7C' 
-            }); 
+            await Notifications.setNotificationChannelAsync('default', { name: 'default', importance: Notifications.AndroidImportance.MAX, vibrationPattern: [0, 250, 250, 250], lightColor: '#FF231F7C' }); 
           } catch (error) {}
         }
       }
@@ -129,10 +154,7 @@ export const CalendarProvider = ({ children, familyId }: { children: ReactNode, 
       if (reminder.unit === 'days') triggerTime.setDate(triggerTime.getDate() - amt);
       
       if (triggerTime > new Date()) {
-        await Notifications.scheduleNotificationAsync({
-          content: { title: ev.title, body: ev.description || '', sound: true },
-          trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: triggerTime, channelId: 'default' },
-        });
+        await Notifications.scheduleNotificationAsync({ content: { title: ev.title, body: ev.description || '', sound: true }, trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: triggerTime, channelId: 'default' } });
       }
     }
   };
@@ -195,7 +217,6 @@ export const CalendarProvider = ({ children, familyId }: { children: ReactNode, 
     await setDoc(doc(db, 'families', familyId), { members: newMembers }, { merge: true });
   };
 
-  // NOUVEAU: Sauvegarde les paramètres visuels
   const updateVisualPreferences = async (updates: any) => {
     if (updates.theme) setTheme(updates.theme);
     if (updates.appBackgroundColor) setAppBackgroundColor(updates.appBackgroundColor);
@@ -224,7 +245,9 @@ export const CalendarProvider = ({ children, familyId }: { children: ReactNode, 
       for (const ev of nativeEvents) {
         const dStart = new Date(ev.startDate); const dEnd = new Date(ev.endDate); 
         const dateStr = `${dStart.getFullYear()}-${String(dStart.getMonth() + 1).padStart(2, '0')}-${String(dStart.getDate()).padStart(2, '0')}`;
-        const isDuplicate = (events[dateStr] || []).some(existingEv => existingEv.title === ev.title && existingEv.participantId === targetParticipantId);
+        
+        let checkArray = events[dateStr] || [];
+        const isDuplicate = checkArray.some(existingEv => existingEv.title === ev.title && existingEv.participantId === targetParticipantId);
 
         if (!isDuplicate) {
           await addDoc(collection(db, 'families', familyId, 'events'), {
@@ -248,22 +271,14 @@ export const CalendarProvider = ({ children, familyId }: { children: ReactNode, 
       handleAddEvent, updateEvent, deleteEvent, monthGrid: getMonthGrid(), 
       currentMonthName: currentMonth.toLocaleString('fr-FR', { month: 'long', year: 'numeric' }),
       nextMonth, prevMonth, members, addMember, updateMember, deleteMember, 
-      
-      // Paramètres de couleurs
       theme, appBackgroundColor, numberColor, fabColor, updateVisualPreferences,
-      
       importDeviceEvents, isImporting, showAlert
     }}>
       {children}
-      
       <Modal visible={alertConfig.visible} transparent={true} animationType="fade">
         <View style={styles.alertOverlay}>
           <View style={styles.alertBox}>
-            <Ionicons 
-              name={alertConfig.type === 'error' ? 'close-circle' : alertConfig.type === 'success' ? 'checkmark-circle' : 'information-circle'} 
-              size={50} 
-              color={alertConfig.type === 'error' ? '#EF4444' : alertConfig.type === 'success' ? '#10B981' : '#3B82F6'} 
-            />
+            <Ionicons name={alertConfig.type === 'error' ? 'close-circle' : alertConfig.type === 'success' ? 'checkmark-circle' : 'information-circle'} size={50} color={alertConfig.type === 'error' ? '#EF4444' : alertConfig.type === 'success' ? '#10B981' : '#3B82F6'} />
             <Text style={styles.alertTitle}>{alertConfig.title}</Text>
             <Text style={styles.alertMessage}>{alertConfig.message}</Text>
             <TouchableOpacity style={styles.alertBtn} onPress={() => setAlertConfig({...alertConfig, visible: false})}>

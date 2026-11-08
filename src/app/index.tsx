@@ -4,6 +4,28 @@ import { useSharedCalendar, CalendarDay, Event, Reminder } from '../hooks/useSha
 import { useTranslation } from '../context/LanguageContext';
 import { Ionicons } from '@expo/vector-icons';
 
+// ----------------------------------------------------
+// NOUVEAU: Convertisseurs de Date Format Européen
+// ----------------------------------------------------
+// Transforme "2026-11-15" (DB) -> "15/11/2026" (Interface)
+const formatToFR = (dbDate: string) => {
+  if (!dbDate) return '';
+  const parts = dbDate.split('-');
+  if (parts.length !== 3) return dbDate;
+  return `${parts[2]}/${parts[1]}/${parts[0]}`;
+};
+
+// Transforme "15/11/2026" (Interface) -> "2026-11-15" (DB)
+const parseToDB = (frDate: string) => {
+  if (!frDate) return '';
+  const sanitized = frDate.replace(/[-.]/g, '/'); // Tolère les tirets et points
+  const parts = sanitized.split('/');
+  if (parts.length === 3) {
+    return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+  }
+  return frDate;
+};
+
 const PERSONAL_KEYWORDS_RULES = [
   { keywords: ['pompier', 'feu', 'caserne'], bg: '#DC2626', text: '#FFFFFF', icon: '🚒' },
   { keywords: ['garde', 'astreinte'], bg: '#2563EB', text: '#FFFFFF', icon: '🛡️' },
@@ -29,26 +51,8 @@ const getMonthDecoration = (monthIndex: number) => {
   return { left: '', right: '', subtitle: '' };
 };
 
-const getCellDecoration = (dateStr: string, eventsForDay: Event[]) => {
-  const d = new Date(dateStr); 
-  const month = d.getMonth(); 
-  const day = d.getDate(); 
-  let decoration = null;
-  
-  if (month === 1 && day === 14) decoration = { tl: '💘', br: '🌹', borderColor: '#FDA4AF' };
-  else if (month === 9 && day === 31) decoration = { tl: '🕸️', br: '🕷️', borderColor: '#FDBA74' };
-  else if (month === 11 && (day === 24 || day === 25)) decoration = { tl: '🎄', br: '🎁', borderColor: '#86EFAC' };
-  else if ((month === 11 && day === 31) || (month === 0 && day === 1)) decoration = { tl: '🎆', br: '🥂', borderColor: '#FDE047' };
-  
-  if (eventsForDay.some(ev => ev.title.toLowerCase().includes('flavie'))) {
-    decoration = { tl: '💕', br: '💕', borderColor: '#FBCFE8' };
-  }
-  return decoration;
-};
-
 export default function SharedCalendarScreen() {
   const { t } = useTranslation();
-  
   const systemTheme = useColorScheme(); 
   
   const { 
@@ -57,7 +61,6 @@ export default function SharedCalendarScreen() {
     theme, appBackgroundColor, numberColor, fabColor 
   } = useSharedCalendar();
 
-  // Détection propre du mode sombre
   const currentTheme = theme === 'system' ? systemTheme : theme;
   const isDark = currentTheme === 'dark';
 
@@ -93,25 +96,21 @@ export default function SharedCalendarScreen() {
     setModalMode(mode);
     if (mode === 'add') {
       if (!selectedDate) setSelectedDate(todayString);
-      setModalTitle(''); 
-      setModalDescription(''); 
-      setModalTime(''); 
-      setModalEndTime(''); 
-      setModalEndDate(''); 
-      setModalIsAllDay(false);
-      setModalParticipantId(members[0]?.id || ''); 
+      setModalTitle(''); setModalDescription(''); setModalTime(''); setModalEndTime(''); 
+      setModalEndDate(''); setModalIsAllDay(false); setModalParticipantId(members[0]?.id || ''); 
       setReminders([]);
     } else if (ev && dateString) {
-      setSelectedDate(dateString); 
+      // Important : on sélectionne la vraie date de début, pas la date du jour dupliqué cliqué
+      setSelectedDate(ev.date || dateString); 
       setEditingEventId(ev.id);
-      setModalTitle(ev.title); 
-      setModalDescription(ev.description || ''); 
-      setModalTime(ev.time || ''); 
+      setModalTitle(ev.title); setModalDescription(ev.description || ''); setModalTime(ev.time || ''); 
       setModalEndTime(ev.endTime || ''); 
-      setModalEndDate(ev.endDate || ''); 
+      
+      // On convertit la date de BDD en JJ/MM/AAAA pour l'utilisateur
+      setModalEndDate(ev.endDate ? formatToFR(ev.endDate) : ''); 
+      
       setModalIsAllDay(ev.isAllDay || false);
-      setModalParticipantId(ev.participantId); 
-      setReminders(ev.reminders || []);
+      setModalParticipantId(ev.participantId); setReminders(ev.reminders || []);
     }
     setModalVisible(true);
   };
@@ -126,12 +125,16 @@ export default function SharedCalendarScreen() {
     if (!modalTitle.trim()) { 
       return showAlert(t('error'), t('emptyTitle'), 'error'); 
     }
+    
+    // On convertit la date JJ/MM/AAAA en date BDD avant sauvegarde
+    const parsedEndDate = modalIsAllDay ? parseToDB(modalEndDate) : '';
+
     const eventData = { 
       title: modalTitle, 
       description: modalDescription, 
       time: modalTime, 
       endTime: modalEndTime, 
-      endDate: modalIsAllDay ? modalEndDate : '', 
+      endDate: parsedEndDate, 
       isAllDay: modalIsAllDay, 
       participantId: modalParticipantId, 
       reminders 
@@ -146,22 +149,25 @@ export default function SharedCalendarScreen() {
   };
 
   const handleDelete = () => { 
-    if (editingEventId && selectedDate) {
-      deleteEvent(selectedDate, editingEventId); 
-    }
+    if (editingEventId && selectedDate) deleteEvent(selectedDate, editingEventId); 
     setModalVisible(false); 
   };
 
   const renderDayCell = (day: CalendarDay, index: number) => {
     if (!day.isCurrentMonth) {
-      // Les cases vides s'adaptent aussi au mode sombre
       return <View key={index} style={[styles.emptyCell, { borderTopWidth: 1, borderColor: isDark ? '#334155' : '#F1F5F9' }]} />;
     }
     
     const isSelected = selectedDate === day.dateString; 
-    const dayEvents = events[day.dateString] || [];
+    
+    // Filtrage et Tri pour assurer l'alignement vertical des barres
+    const rawEvents = events[day.dateString] || [];
+    const uniqueEventsMap = new Map();
+    rawEvents.forEach((ev: Event) => uniqueEventsMap.set(ev.id, ev));
+    const dayEvents = Array.from(uniqueEventsMap.values());
+    dayEvents.sort((a, b) => a.id.localeCompare(b.id)); // Permet de garder l'ordre stable
+
     const isToday = day.dateString === todayString; 
-    const cellDeco = getCellDecoration(day.dateString, dayEvents);
     
     return (
       <TouchableOpacity 
@@ -170,40 +176,45 @@ export default function SharedCalendarScreen() {
           styles.dayCell, 
           { borderColor: isDark ? '#334155' : '#F1F5F9' },
           isSelected && { borderWidth: 2, borderColor: isDark ? '#FFFFFF' : '#333', borderRadius: 8 },
-          isToday && { backgroundColor: isDark ? '#334155' : '#F1F5F9' },
-          cellDeco && { borderColor: cellDeco.borderColor, borderWidth: 1, backgroundColor: `${cellDeco.borderColor}15` }
+          isToday && { backgroundColor: isDark ? '#334155' : '#F1F5F9' }
         ]} 
         onPress={() => setSelectedDate(day.dateString)} 
         activeOpacity={0.6}
       >
-        {cellDeco && (
-          <>
-            <Text style={styles.decoTopLeft}>{cellDeco.tl}</Text>
-            <Text style={styles.decoBottomRight}>{cellDeco.br}</Text>
-          </>
-        )}
-        
-        {/* CORRECTION DES NUMÉROS: S'ils sont restés "#333333" par défaut, on les force en blanc dans le mode sombre */}
-        <Text style={[
-          styles.dayNumber, 
-          isToday && styles.textBold, 
-          { color: (isDark && numberColor === '#333333') ? '#FFFFFF' : numberColor }
-        ]}>
+        <Text style={[styles.dayNumber, isToday && styles.textBold, { color: (isDark && numberColor === '#333333') ? '#FFFFFF' : numberColor }]}>
           {day.dayNumber}
         </Text>
-        
+
         <View style={styles.pillContainer}>
           {dayEvents.map((ev: Event, i: number) => {
              const styleData = applyPersonalRules(ev.title, getMemberColor(ev.participantId));
+             const span = ev.spanStatus || 'single';
+             
+             // ----------------------------------------------------
+             // NOUVEAU: Le moteur d'illusion visuelle (Design Google)
+             // ----------------------------------------------------
+             const isConnectedLeft = (span === 'middle' || span === 'end') && index % 7 !== 0; // Pas de connexion le Dimanche
+             const isConnectedRight = (span === 'start' || span === 'middle') && index % 7 !== 6; // Pas de connexion le Samedi
+             
+             // On n'affiche le texte que le premier jour (ou s'il coupe à la nouvelle ligne)
+             const showText = span === 'start' || span === 'single' || index % 7 === 0;
+
              return (
                <TouchableOpacity 
                  key={i} 
-                 style={[styles.eventPill, { backgroundColor: styleData.bg }, styleData.isCustom && styles.customPillBorder]} 
+                 style={[
+                   styles.eventPill, 
+                   { backgroundColor: styleData.bg }, 
+                   styleData.isCustom && styles.customPillBorder,
+                   // L'astuce des coins cassés et des marges retirées
+                   isConnectedLeft && { marginLeft: 0, borderTopLeftRadius: 0, borderBottomLeftRadius: 0 },
+                   isConnectedRight && { marginRight: 0, borderTopRightRadius: 0, borderBottomRightRadius: 0 }
+                 ]} 
                  onPress={() => openModal('edit', ev, day.dateString)} 
                  activeOpacity={0.7}
                >
-                 <Text style={[styles.pillText, {color: styleData.text}]} numberOfLines={1}>
-                   {styleData.icon} {ev.title}
+                 <Text style={[styles.pillText, {color: showText ? styleData.text : 'transparent'}]} numberOfLines={1}>
+                   {showText ? `${styleData.icon} ${ev.title}` : ' '}
                  </Text>
                </TouchableOpacity>
              );
@@ -252,13 +263,8 @@ export default function SharedCalendarScreen() {
       </View>
 
       <View style={styles.premiumBottomAction}>
-        {/* CORRECTION DU BOUTON AJOUT: Ajout d'une bordure subtile en mode sombre pour qu'il se détache */}
         <TouchableOpacity 
-          style={[
-            styles.premiumAddBtn, 
-            { backgroundColor: fabColor },
-            isDark && fabColor === '#0F172A' ? { borderWidth: 1, borderColor: '#334155' } : {}
-          ]} 
+          style={[styles.premiumAddBtn, { backgroundColor: fabColor }, isDark && fabColor === '#0F172A' ? { borderWidth: 1, borderColor: '#334155' } : {}]} 
           onPress={() => openModal('add')} 
           activeOpacity={0.8}
         >
@@ -281,21 +287,8 @@ export default function SharedCalendarScreen() {
               </TouchableOpacity>
             </View>
             
-            <TextInput 
-              style={[styles.input, isDark && styles.inputDark]} 
-              placeholderTextColor={isDark ? '#94A3B8' : '#94A3B8'} 
-              placeholder={t('titlePlaceholder')} 
-              value={modalTitle} 
-              onChangeText={setModalTitle} 
-            />
-            <TextInput 
-              style={[styles.input, isDark && styles.inputDark, { height: 80, textAlignVertical: 'top' }]} 
-              placeholderTextColor={isDark ? '#94A3B8' : '#94A3B8'} 
-              placeholder={t('descPlaceholder')} 
-              value={modalDescription} 
-              onChangeText={setModalDescription} 
-              multiline 
-            />
+            <TextInput style={[styles.input, isDark && styles.inputDark]} placeholderTextColor={isDark ? '#94A3B8' : '#94A3B8'} placeholder={t('titlePlaceholder')} value={modalTitle} onChangeText={setModalTitle} />
+            <TextInput style={[styles.input, isDark && styles.inputDark, { height: 80, textAlignVertical: 'top' }]} placeholderTextColor={isDark ? '#94A3B8' : '#94A3B8'} placeholder={t('descPlaceholder')} value={modalDescription} onChangeText={setModalDescription} multiline />
 
             <View style={[styles.timeSection, isDark && styles.timeSectionDark]}>
                 <View style={styles.switchContainer}>
@@ -378,16 +371,24 @@ const styles = StyleSheet.create({
   dayOfWeekText: { fontSize: 14, fontWeight: '600', color: '#94A3B8', width: '14.28%', textAlign: 'center' },
   scrollPadding: { paddingBottom: 110 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start' },
-  emptyCell: { width: '14.28%', height: 105, padding: 2 },
-  dayCell: { width: '14.28%', height: 105, padding: 2, borderTopWidth: 1, alignItems: 'center', overflow: 'hidden' },
+  emptyCell: { width: '14.28%', height: 105, paddingVertical: 2 }, // paddingVertical strict pour éviter l'espacement latéral
+  
+  // Modification de la cellule: alignement 'center' naturel mais la bulle remplira la largeur
+  dayCell: { width: '14.28%', height: 105, paddingVertical: 2, borderTopWidth: 1, alignItems: 'center', overflow: 'hidden' },
   dayNumber: { fontSize: 13, marginBottom: 4, marginTop: 4, zIndex: 2 },
   textBold: { fontWeight: 'bold' },
   decoTopLeft: { position: 'absolute', top: 2, left: 2, fontSize: 10, opacity: 0.8 },
   decoBottomRight: { position: 'absolute', bottom: 2, right: 2, fontSize: 10, opacity: 0.8 },
-  pillContainer: { width: '100%', alignItems: 'center', gap: 3, zIndex: 2 },
-  eventPill: { width: '98%', paddingVertical: 4, paddingHorizontal: 2, borderRadius: 4 },
+  
+  // Modification : On enlève le gap et l'align-items
+  pillContainer: { width: '100%', gap: 2, zIndex: 2 },
+  
+  // Modification : La marge est maintenant intégrée à la bulle, pour être supprimée dynamiquement
+  eventPill: { marginHorizontal: 4, paddingVertical: 4, paddingHorizontal: 2, borderRadius: 4 },
   customPillBorder: { borderWidth: 1, borderColor: 'rgba(0,0,0,0.1)' },
-  pillText: { fontSize: 9, fontWeight: '700', textAlign: 'center' },
+  
+  // minHeight pour que la barre vide garde la même épaisseur
+  pillText: { fontSize: 9, fontWeight: '700', textAlign: 'center', minHeight: 12 },
   
   premiumBottomAction: { position: 'absolute', bottom: 25, width: '100%', alignItems: 'center', zIndex: 10 },
   premiumAddBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 24, borderRadius: 30, elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 8 },

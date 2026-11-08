@@ -5,13 +5,13 @@ const dictionary = {
     agenda: 'Agenda', settings: 'Réglages', addEvent: 'Ajouter un événement',
     editEvent: 'Modifier l\'événement', titlePlaceholder: 'Titre (ex: Vacances, Rdv...)',
     descPlaceholder: 'Lieu, notes...', allDay: 'Toute la journée', start: 'Début (ex: 14:30)',
-    end: 'Fin (ex: 15:30)', endDate: 'Date de fin (ex: 2026-11-15)', reminders: 'Rappels de notification',
-    save: 'Sauvegarder', createEvent: 'Créer l\'événement', delete: 'Supprimer',
+    end: 'Fin (ex: 15:30)', endDate: 'Date de fin (ex: 15/11/2026)', reminders: 'Rappels',
+    save: 'Sauvegarder', createEvent: 'Créer', delete: 'Supprimer',
     minutes: 'Min', hours: 'H', days: 'J', assignTo: 'Attribuer à :',
     language: 'Langue de l\'application', copied: 'Copié ! 📋', copiedDesc: 'Le message et le code ont été copiés.',
     success: 'Succès', error: 'Erreur', warning: 'Attention', myAccount: 'Mon Compte',
     loggedInAs: 'Connecté en tant que :', changePassword: 'Changer mon mot de passe',
-    deleteAccount: 'Supprimer mon compte', myFamily: 'Ma Famille', inviteCode: 'Code d\'invitation pour rejoindre ce calendrier :',
+    deleteAccount: 'Supprimer mon compte', myFamily: 'Ma Famille', inviteCode: 'Code d\'invitation :',
     share: 'Partager', copy: 'Copier', changeFamily: 'Changer de famille', comingSoon: 'Bientôt',
     multiFamilySoon: 'Le système multi-familles arrive bientôt !', appColor: 'Couleur de l\'application',
     groupMembers: 'Membres du groupe', tapToEdit: 'Touchez un membre pour le modifier',
@@ -24,14 +24,12 @@ const dictionary = {
     editError: 'Impossible de modifier cet événement.', deleteError: 'Impossible de supprimer cet événement.',
     keepOneMember: 'Vous devez garder au moins un membre.', permDenied: 'Permission refusée.',
     noCalendar: 'Aucun calendrier trouvé.', noEvents: 'Aucun événement à importer.',
-    upToDate: 'Tout est déjà à jour ! Aucun nouvel événement à importer.', eventsSynced: 'nouveaux événements synchronisés dans le cloud !',
+    upToDate: 'Tout est déjà à jour !', eventsSynced: 'événements synchronisés !',
     loading: 'Chargement...', notConnected: 'Non connecté', passwordResetSent: 'Un e-mail de réinitialisation vous a été envoyé.',
-    passwordResetError: 'Impossible d\'envoyer l\'e-mail.', reloginRequired: 'Veuillez vous déconnecter puis vous reconnecter avant de supprimer votre compte.',
+    passwordResetError: 'Impossible d\'envoyer l\'e-mail.', reloginRequired: 'Veuillez vous déconnecter puis vous reconnecter.',
     logoutError: 'Impossible de se déconnecter.', shareError: 'Impossible de partager le code.',
     shareMessage: 'Rejoins mon agenda partagé sur Syncro ! Code de famille :', emptyTitle: 'Le titre est obligatoire.',
     ok: 'OK', before: 'avant', 
-    
-    // NOUVEAUX TEXTES
     appearance: 'Apparence & Couleurs', theme: 'Thème', themeSystem: 'Système', themeLight: 'Clair', themeDark: 'Sombre',
     appBgColor: 'Fond de l\'application', numberColor: 'Numéros du calendrier', fabColor: 'Bouton Ajouter',
     selectColor: 'Choisir la couleur', eventsColorHint: 'Note : La couleur des cartes d\'événements correspond à la couleur attribuée à chaque membre ci-dessous.'
@@ -40,13 +38,13 @@ const dictionary = {
     agenda: 'Agenda', settings: 'Settings', addEvent: 'Add Event',
     editEvent: 'Edit Event', titlePlaceholder: 'Title (e.g. Holidays, Meeting...)',
     descPlaceholder: 'Location, notes...', allDay: 'All day', start: 'Start (e.g. 14:30)',
-    end: 'End (e.g. 15:30)', endDate: 'End date (e.g. 2026-11-15)', reminders: 'Notification reminders',
-    save: 'Save', createEvent: 'Create event', delete: 'Delete',
+    end: 'End (e.g. 15:30)', endDate: 'End date (e.g. 15/11/2026)', reminders: 'Reminders',
+    save: 'Save', createEvent: 'Create', delete: 'Delete',
     minutes: 'Min', hours: 'H', days: 'D', assignTo: 'Assign to:',
     language: 'App Language', copied: 'Copied! 📋', copiedDesc: 'Message and code copied to clipboard.',
     success: 'Success', error: 'Error', warning: 'Warning', myAccount: 'My Account',
     loggedInAs: 'Logged in as:', changePassword: 'Change password',
-    deleteAccount: 'Delete my account', myFamily: 'My Family', inviteCode: 'Invitation code for this calendar:',
+    deleteAccount: 'Delete my account', myFamily: 'My Family', inviteCode: 'Invitation code:',
     share: 'Share', copy: 'Copy', changeFamily: 'Change family', comingSoon: 'Coming soon',
     multiFamilySoon: 'Multi-family system is coming soon!', appColor: 'App Color',
     groupMembers: 'Group Members', tapToEdit: 'Tap a member to edit',
@@ -59,14 +57,12 @@ const dictionary = {
     editError: 'Could not edit this event.', deleteError: 'Could not delete this event.',
     keepOneMember: 'You must keep at least one member.', permDenied: 'Permission denied.',
     noCalendar: 'No calendar found.', noEvents: 'No events to import.',
-    upToDate: 'Everything is up to date! No new events to import.', eventsSynced: 'new events synced to the cloud!',
+    upToDate: 'Everything is up to date!', eventsSynced: 'events synced!',
     loading: 'Loading...', notConnected: 'Not connected', passwordResetSent: 'A password reset email has been sent.',
-    passwordResetError: 'Could not send the email.', reloginRequired: 'Please log out and log back in before deleting your account.',
+    passwordResetError: 'Could not send the email.', reloginRequired: 'Please log out and log back in.',
     logoutError: 'Could not log out.', shareError: 'Could not share the code.',
     shareMessage: 'Join my shared calendar on Syncro! Family code:', emptyTitle: 'Title is required.',
     ok: 'OK', before: 'before',
-
-    // NOUVEAUX TEXTES
     appearance: 'Appearance & Colors', theme: 'Theme', themeSystem: 'System', themeLight: 'Light', themeDark: 'Dark',
     appBgColor: 'App Background', numberColor: 'Calendar Numbers', fabColor: 'Add Button',
     selectColor: 'Select Color', eventsColorHint: 'Note: Event card colors are based on the color assigned to each member below.'
@@ -78,7 +74,6 @@ export const LanguageContext = createContext<any>(null);
 export const LanguageProvider = ({ children }: { children: React.ReactNode }) => {
   const [lang, setLang] = useState<'fr' | 'en'>('fr');
   const t = (key: keyof typeof dictionary['fr']) => dictionary[lang][key] || key;
-
   return (
     <LanguageContext.Provider value={{ lang, setLang, t }}>
       {children}
