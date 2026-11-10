@@ -1,5 +1,5 @@
 import React, { createContext, useState, ReactNode, useEffect } from 'react';
-import { Platform, Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { Platform, Modal, View, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native';
 import * as Calendar from 'expo-calendar/legacy';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
@@ -8,47 +8,89 @@ import { db } from '../config/firebase';
 import { useTranslation } from './LanguageContext';
 import { Ionicons } from '@expo/vector-icons';
 
+// ------------------------------------------------------------------
+// CONFIGURATION GLOBALE DES NOTIFICATIONS
+// ------------------------------------------------------------------
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({ shouldShowAlert: true, shouldPlaySound: true, shouldSetBadge: true }),
+  handleNotification: async () => ({ 
+    shouldShowAlert: true, 
+    shouldPlaySound: true, 
+    shouldSetBadge: true,
+    shouldShowBanner: true, // Fix TS: Added required property
+    shouldShowList: true    // Fix TS: Added required property
+  }),
 });
 
-export interface Reminder { amount: string; unit: string; }
-
-export interface Event {
-  id: string; title: string; participantId: string; description?: string; time?: string;
-  endTime?: string; endDate?: string; isAllDay?: boolean; date?: string; reminders?: Reminder[];
-  spanStatus?: 'single' | 'start' | 'middle' | 'end'; // NOUVEAU: Pour la gestion d'affichage continu
+// ------------------------------------------------------------------
+// INTERFACES ET TYPES
+// ------------------------------------------------------------------
+export interface Reminder { 
+  amount: string; 
+  unit: string; 
 }
 
-export interface CalendarDay { dateString: string; dayNumber: string; isCurrentMonth: boolean; }
-export interface Member { id: string; name: string; color: string; }
+export interface Event {
+  id: string; 
+  title: string; 
+  participantId: string; 
+  description?: string; 
+  location?: string; 
+  time?: string; 
+  endTime?: string; 
+  endDate?: string; 
+  isAllDay?: boolean; 
+  date?: string; 
+  reminders?: Reminder[]; 
+  spanStatus?: 'single' | 'start' | 'middle' | 'end'; 
+}
+
+export interface CalendarDay { 
+  dateString: string; 
+  dayNumber: string; 
+  isCurrentMonth: boolean; 
+}
+
+export interface Member { 
+  id: string; 
+  name: string; 
+  color: string; 
+}
 
 const INITIAL_MEMBERS: Member[] = [ { id: '1', name: 'You', color: '#FFFFFF' } ];
 
 export const CalendarContext = createContext<any>(null);
 
-// UTILITAIRE : Trouver toutes les dates entre deux jours
+// ------------------------------------------------------------------
+// FONCTION UTILITAIRE : GÉNÉRER LES DATES INTERMÉDIAIRES
+// ------------------------------------------------------------------
 const getDatesInRange = (startStr: string, endStr: string) => {
   if (!startStr || !endStr) return [startStr || endStr];
+  
   const dates = [];
   const [sY, sM, sD] = startStr.split('-').map(Number);
   const [eY, eM, eD] = endStr.split('-').map(Number);
   
   if (!sY || !eY) return [startStr];
+  
   const currentDate = new Date(sY, sM - 1, sD);
   const endDate = new Date(eY, eM - 1, eD);
   
   if (endDate < currentDate) return [startStr]; 
+  
   while (currentDate <= endDate) {
     const y = currentDate.getFullYear();
     const m = String(currentDate.getMonth() + 1).padStart(2, '0');
     const d = String(currentDate.getDate()).padStart(2, '0');
+    
     dates.push(`${y}-${m}-${d}`);
     currentDate.setDate(currentDate.getDate() + 1);
   }
   return dates;
 };
 
+// ------------------------------------------------------------------
+// PROVIDER PRINCIPAL
+// ------------------------------------------------------------------
 export const CalendarProvider = ({ children, familyId }: { children: ReactNode, familyId: string }) => {
   const { t } = useTranslation();
   
@@ -57,8 +99,8 @@ export const CalendarProvider = ({ children, familyId }: { children: ReactNode, 
   const [selectedParticipantId, setSelectedParticipantId] = useState<string>(INITIAL_MEMBERS[0].id);
   const [members, setMembers] = useState<Member[]>(INITIAL_MEMBERS);
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [isImporting, setIsImporting] = useState<boolean>(false);
   
+  const [isImporting, setIsImporting] = useState<boolean>(false);
   const [theme, setTheme] = useState<'system' | 'light' | 'dark'>('system');
   const [appBackgroundColor, setAppBackgroundColor] = useState<string>('#FF4D4D');
   const [numberColor, setNumberColor] = useState<string>('#333333');
@@ -66,11 +108,14 @@ export const CalendarProvider = ({ children, familyId }: { children: ReactNode, 
   
   const [alertConfig, setAlertConfig] = useState({ visible: false, title: '', message: '', type: 'info' });
 
-  const showAlert = (title: string, message: string, type: 'info' | 'error' | 'success' = 'info') => {
+  // Fix TS: Added 'warning' to the accepted types
+  const showAlert = (title: string, message: string, type: 'info' | 'error' | 'success' | 'warning' = 'info') => {
     setAlertConfig({ visible: true, title, message, type });
   };
 
-  // NOUVEAU: Répartition intelligente des événements sur plusieurs jours
+  // ------------------------------------------------------------------
+  // SYNCHRONISATION FIREBASE
+  // ------------------------------------------------------------------
   useEffect(() => {
     if (!familyId) return;
     const unsubscribe = onSnapshot(collection(db, 'families', familyId, 'events'), (snapshot) => {
@@ -84,8 +129,8 @@ export const CalendarProvider = ({ children, familyId }: { children: ReactNode, 
           const range = getDatesInRange(data.date, data.endDate);
           range.forEach((dStr, index) => {
             if (!cloudEvents[dStr]) cloudEvents[dStr] = [];
-            let spanStatus: 'single' | 'start' | 'middle' | 'end' = 'middle';
             
+            let spanStatus: 'single' | 'start' | 'middle' | 'end' = 'middle';
             if (range.length === 1) spanStatus = 'single';
             else if (index === 0) spanStatus = 'start';
             else if (index === range.length - 1) spanStatus = 'end';
@@ -113,36 +158,109 @@ export const CalendarProvider = ({ children, familyId }: { children: ReactNode, 
         if (data.numberColor) setNumberColor(data.numberColor);
         if (data.fabColor) setFabColor(data.fabColor);
       } else {
-        setDoc(doc(db, 'families', familyId), { members: INITIAL_MEMBERS, theme: 'system', appBackgroundColor: '#FF4D4D', numberColor: '#333333', fabColor: '#0F172A' });
+        setDoc(doc(db, 'families', familyId), { 
+          members: INITIAL_MEMBERS, 
+          theme: 'system', 
+          appBackgroundColor: '#FF4D4D', 
+          numberColor: '#333333', 
+          fabColor: '#0F172A' 
+        });
       }
     });
     return () => unsubscribe();
   }, [familyId]);
 
+  // ------------------------------------------------------------------
+  // CONFIGURATION DES NOTIFICATIONS ET DES BOUTONS INTERACTIFS
+  // ------------------------------------------------------------------
   useEffect(() => {
-    const requestPermissions = async () => {
+    const setupNotifications = async () => {
       if (Device.isDevice && Platform.OS !== 'web') {
-        const { status: existingStatus } = await Notifications.getPermissionsAsync();
-        if (existingStatus !== 'granted') await Notifications.requestPermissionsAsync();
-        if (Platform.OS === 'android') {
-          try { 
-            await Notifications.setNotificationChannelAsync('default', { name: 'default', importance: Notifications.AndroidImportance.MAX, vibrationPattern: [0, 250, 250, 250], lightColor: '#FF231F7C' }); 
-          } catch (error) {}
+        try {
+          const { status: existingStatus } = await Notifications.getPermissionsAsync();
+          if (existingStatus !== 'granted') {
+            await Notifications.requestPermissionsAsync();
+          }
+
+          if (Platform.OS === 'android') {
+            try {
+              await Notifications.setNotificationChannelAsync('default', { 
+                name: 'default', 
+                importance: Notifications.AndroidImportance.MAX, 
+                vibrationPattern: [0, 250, 250, 250], 
+                lightColor: '#FF231F7C' 
+              }); 
+            } catch (error) {
+              console.warn("Erreur lors de la création du canal Android", error);
+            }
+          }
+
+          try {
+            await Notifications.setNotificationCategoryAsync('EVENT_REMINDER', [
+              { 
+                identifier: 'navigate', 
+                buttonTitle: '📍 Y aller (Itinéraire)', 
+                options: { opensAppToForeground: false } 
+              },
+              { 
+                identifier: 'snooze', 
+                buttonTitle: '🔕 Sourdine', 
+                options: { isDestructive: true, opensAppToForeground: false } 
+              }
+            ]);
+          } catch (error) {
+            console.warn("Erreur lors de la création de la catégorie de notification", error);
+          }
+        } catch (error) {
+          console.warn("Erreur de permission de notification", error);
         }
       }
     };
-    requestPermissions();
+    
+    setupNotifications();
+
+    const subscription = Notifications.addNotificationResponseReceivedListener(response => {
+      const actionId = response.actionIdentifier;
+      // Fix TS: Added optional chaining to safely access data
+      const locationData = response.notification.request.content.data?.location;
+
+      if (actionId === 'navigate' && locationData) {
+        // Fix TS: Safely cast to string for encodeURIComponent
+        const safeLocation = String(locationData); 
+        
+        const url = Platform.select({
+          ios: `maps:0,0?q=${encodeURIComponent(safeLocation)}`,
+          android: `geo:0,0?q=${encodeURIComponent(safeLocation)}`,
+          web: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(safeLocation)}`
+        });
+        
+        if (url) {
+          Linking.openURL(url).catch(err => console.warn('Impossible d\'ouvrir le GPS', err));
+        }
+      } 
+    });
+
+    return () => subscription.remove();
   }, []);
 
+  // ------------------------------------------------------------------
+  // PROGRAMMATION DES RAPPELS LOCAUX
+  // ------------------------------------------------------------------
   const scheduleReminders = async (eventDate: string, ev: Event) => {
     if (Platform.OS === 'web' || !ev.reminders || ev.reminders.length === 0) return;
+    
     const [year, month, day] = eventDate.split('-').map(Number);
-    let startHour = 8; let startMinute = 0;
+    let startHour = 8; 
+    let startMinute = 0;
     
     if (!ev.isAllDay && ev.time) {
       const parts = ev.time.split(':');
-      if(parts.length === 2) { startHour = Number(parts[0]); startMinute = Number(parts[1]); }
+      if (parts.length === 2) { 
+        startHour = Number(parts[0]); 
+        startMinute = Number(parts[1]); 
+      }
     }
+    
     const eventDateTime = new Date(year, month - 1, day, startHour, startMinute);
     
     for (const reminder of ev.reminders) {
@@ -154,66 +272,118 @@ export const CalendarProvider = ({ children, familyId }: { children: ReactNode, 
       if (reminder.unit === 'days') triggerTime.setDate(triggerTime.getDate() - amt);
       
       if (triggerTime > new Date()) {
-        await Notifications.scheduleNotificationAsync({ content: { title: ev.title, body: ev.description || '', sound: true }, trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: triggerTime, channelId: 'default' } });
+        await Notifications.scheduleNotificationAsync({ 
+          content: { 
+            title: ev.title, 
+            body: ev.location ? `📍 ${ev.location}` : (ev.description || 'Événement imminent'), 
+            sound: true,
+            // Fix TS: Replaced categoryId with categoryIdentifier
+            categoryIdentifier: ev.location ? 'EVENT_REMINDER' : undefined, 
+            data: { location: ev.location } 
+          }, 
+          trigger: { 
+            type: Notifications.SchedulableTriggerInputTypes.DATE, 
+            date: triggerTime, 
+            channelId: 'default' 
+          } 
+        });
       }
     }
   };
 
+  // ------------------------------------------------------------------
+  // GESTION DU CALENDRIER
+  // ------------------------------------------------------------------
   const getMonthGrid = (): CalendarDay[] => {
-    const year = currentMonth.getFullYear(); const month = currentMonth.getMonth();
-    const firstDay = new Date(year, month, 1).getDay(); const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const year = currentMonth.getFullYear(); 
+    const month = currentMonth.getMonth();
+    
+    let firstDay = new Date(year, month, 1).getDay() - 1;
+    if (firstDay === -1) firstDay = 6;
+    
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
     const grid: CalendarDay[] = [];
     
-    for (let i = 0; i < firstDay; i++) grid.push({ dateString: `empty-start-${i}`, dayNumber: '', isCurrentMonth: false });
-    for (let i = 1; i <= daysInMonth; i++) {
-      grid.push({ dateString: `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`, dayNumber: i.toString(), isCurrentMonth: true });
+    for (let i = 0; i < firstDay; i++) {
+      grid.push({ dateString: `empty-start-${i}`, dayNumber: '', isCurrentMonth: false });
     }
+    
+    for (let i = 1; i <= daysInMonth; i++) {
+      grid.push({ 
+        dateString: `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`, 
+        dayNumber: i.toString(), 
+        isCurrentMonth: true 
+      });
+    }
+    
     const remainder = grid.length % 7;
     if (remainder !== 0) { 
-      for (let i = 0; i < (7 - remainder); i++) grid.push({ dateString: `empty-end-${i}`, dayNumber: '', isCurrentMonth: false }); 
+      for (let i = 0; i < (7 - remainder); i++) {
+        grid.push({ dateString: `empty-end-${i}`, dayNumber: '', isCurrentMonth: false }); 
+      }
     }
+    
     return grid;
   };
 
   const nextMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
   const prevMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
 
+  // ------------------------------------------------------------------
+  // OPÉRATIONS CRUD
+  // ------------------------------------------------------------------
   const handleAddEvent = async (dateStr: string, ev: Event) => {
     try {
       await addDoc(collection(db, 'families', familyId, 'events'), { date: dateStr, ...ev });
       scheduleReminders(dateStr, ev);
-    } catch (error) { showAlert(t('error'), t('cloudError'), 'error'); }
+    } catch (error) { 
+      showAlert(t('error'), t('cloudError'), 'error'); 
+    }
   };
 
   const updateEvent = async (dateStr: string, ev: Event) => {
     try {
       await updateDoc(doc(db, 'families', familyId, 'events', ev.id), { ...ev });
       scheduleReminders(dateStr, ev);
-    } catch (error) { showAlert(t('error'), t('editError'), 'error'); }
+    } catch (error) { 
+      showAlert(t('error'), t('editError'), 'error'); 
+    }
   };
 
   const deleteEvent = async (dateStr: string, eventId: string) => {
-    try { await deleteDoc(doc(db, 'families', familyId, 'events', eventId)); } 
-    catch (error) { showAlert(t('error'), t('deleteError'), 'error'); }
+    try { 
+      await deleteDoc(doc(db, 'families', familyId, 'events', eventId)); 
+    } catch (error) { 
+      showAlert(t('error'), t('deleteError'), 'error'); 
+    }
   };
 
   const addMember = async (name: string, color: string) => {
     if (!name.trim()) return;
     const newMembers = [...members, { id: Date.now().toString(), name, color }];
-    setMembers(newMembers); await setDoc(doc(db, 'families', familyId), { members: newMembers }, { merge: true });
+    setMembers(newMembers); 
+    await setDoc(doc(db, 'families', familyId), { members: newMembers }, { merge: true });
   };
 
   const updateMember = async (id: string, name: string, color: string) => {
     if (!name.trim()) return;
     const newMembers = members.map(m => m.id === id ? { ...m, name, color } : m);
-    setMembers(newMembers); await setDoc(doc(db, 'families', familyId), { members: newMembers }, { merge: true });
+    setMembers(newMembers); 
+    await setDoc(doc(db, 'families', familyId), { members: newMembers }, { merge: true });
   };
 
   const deleteMember = async (id: string) => {
-    if (members.length <= 1) return showAlert(t('error'), t('keepOneMember'), 'error');
+    if (members.length <= 1) {
+      return showAlert(t('error'), t('keepOneMember'), 'error');
+    }
+    
     const newMembers = members.filter(m => m.id !== id);
     setMembers(newMembers);
-    if (selectedParticipantId === id) setSelectedParticipantId(newMembers[0].id);
+    
+    if (selectedParticipantId === id) {
+      setSelectedParticipantId(newMembers[0].id);
+    }
+    
     await setDoc(doc(db, 'families', familyId), { members: newMembers }, { merge: true });
   };
 
@@ -222,6 +392,7 @@ export const CalendarProvider = ({ children, familyId }: { children: ReactNode, 
     if (updates.appBackgroundColor) setAppBackgroundColor(updates.appBackgroundColor);
     if (updates.numberColor) setNumberColor(updates.numberColor);
     if (updates.fabColor) setFabColor(updates.fabColor);
+    
     await setDoc(doc(db, 'families', familyId), updates, { merge: true });
   };
 
@@ -229,29 +400,52 @@ export const CalendarProvider = ({ children, familyId }: { children: ReactNode, 
     try {
       setIsImporting(true);
       const { status } = await Calendar.requestCalendarPermissionsAsync();
-      if (status !== 'granted') { setIsImporting(false); return showAlert(t('error'), t('permDenied'), 'error'); }
+      
+      if (status !== 'granted') { 
+        setIsImporting(false); 
+        return showAlert(t('error'), t('permDenied'), 'error'); 
+      }
       
       const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
       const calendarIds = calendars.map(c => c.id);
-      if (calendarIds.length === 0) { setIsImporting(false); return showAlert(t('warning'), t('noCalendar'), 'warning'); }
       
-      const startDate = new Date(); startDate.setMonth(startDate.getMonth() - 1);
-      const endDate = new Date(); endDate.setMonth(endDate.getMonth() + 6);
+      if (calendarIds.length === 0) { 
+        setIsImporting(false); 
+        return showAlert(t('warning'), t('noCalendar'), 'warning'); 
+      }
+      
+      const startDate = new Date(); 
+      startDate.setMonth(startDate.getMonth() - 1);
+      
+      const endDate = new Date(); 
+      endDate.setMonth(endDate.getMonth() + 6);
+      
       const nativeEvents = await Calendar.getEventsAsync(calendarIds, startDate, endDate);
       
-      if (nativeEvents.length === 0) { setIsImporting(false); return showAlert(t('info'), t('noEvents'), 'info'); }
+      if (nativeEvents.length === 0) { 
+        setIsImporting(false); 
+        return showAlert(t('info'), t('noEvents'), 'info'); 
+      }
 
       let addedCount = 0; 
+      
       for (const ev of nativeEvents) {
-        const dStart = new Date(ev.startDate); const dEnd = new Date(ev.endDate); 
+        const dStart = new Date(ev.startDate); 
+        const dEnd = new Date(ev.endDate); 
         const dateStr = `${dStart.getFullYear()}-${String(dStart.getMonth() + 1).padStart(2, '0')}-${String(dStart.getDate()).padStart(2, '0')}`;
         
         let checkArray = events[dateStr] || [];
-        const isDuplicate = checkArray.some(existingEv => existingEv.title === ev.title && existingEv.participantId === targetParticipantId);
+        const isDuplicate = checkArray.some(existingEv => 
+          existingEv.title === ev.title && existingEv.participantId === targetParticipantId
+        );
 
         if (!isDuplicate) {
           await addDoc(collection(db, 'families', familyId, 'events'), {
-            date: dateStr, title: ev.title, participantId: targetParticipantId, description: ev.notes || '',
+            date: dateStr, 
+            title: ev.title, 
+            participantId: targetParticipantId, 
+            description: ev.notes || '',
+            location: ev.location || '',
             time: ev.allDay ? '' : dStart.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
             endTime: ev.allDay ? '' : dEnd.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
             isAllDay: ev.allDay
@@ -259,10 +453,18 @@ export const CalendarProvider = ({ children, familyId }: { children: ReactNode, 
           addedCount++;
         }
       }
-      if (addedCount === 0) showAlert(t('success'), t('upToDate'), 'success');
-      else showAlert(t('success'), `${addedCount} ${t('eventsSynced')}`, 'success');
-    } catch (error) { showAlert(t('error'), t('cloudError'), 'error'); } 
-    finally { setIsImporting(false); }
+      
+      if (addedCount === 0) {
+        showAlert(t('success'), t('upToDate'), 'success');
+      } else {
+        showAlert(t('success'), `${addedCount} ${t('eventsSynced')}`, 'success');
+      }
+      
+    } catch (error) { 
+      showAlert(t('error'), t('cloudError'), 'error'); 
+    } finally { 
+      setIsImporting(false); 
+    }
   };
 
   return (
@@ -275,12 +477,18 @@ export const CalendarProvider = ({ children, familyId }: { children: ReactNode, 
       importDeviceEvents, isImporting, showAlert
     }}>
       {children}
+      
       <Modal visible={alertConfig.visible} transparent={true} animationType="fade">
         <View style={styles.alertOverlay}>
           <View style={styles.alertBox}>
-            <Ionicons name={alertConfig.type === 'error' ? 'close-circle' : alertConfig.type === 'success' ? 'checkmark-circle' : 'information-circle'} size={50} color={alertConfig.type === 'error' ? '#EF4444' : alertConfig.type === 'success' ? '#10B981' : '#3B82F6'} />
+            <Ionicons 
+              name={alertConfig.type === 'error' ? 'close-circle' : alertConfig.type === 'success' ? 'checkmark-circle' : alertConfig.type === 'warning' ? 'warning' : 'information-circle'} 
+              size={50} 
+              color={alertConfig.type === 'error' ? '#EF4444' : alertConfig.type === 'success' ? '#10B981' : alertConfig.type === 'warning' ? '#F59E0B' : '#3B82F6'} 
+            />
             <Text style={styles.alertTitle}>{alertConfig.title}</Text>
             <Text style={styles.alertMessage}>{alertConfig.message}</Text>
+            
             <TouchableOpacity style={styles.alertBtn} onPress={() => setAlertConfig({...alertConfig, visible: false})}>
               <Text style={styles.alertBtnText}>{t('ok')}</Text>
             </TouchableOpacity>
