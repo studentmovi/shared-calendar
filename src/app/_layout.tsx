@@ -10,6 +10,7 @@ import { getOrMigrateUserProfile, ensureUserInSyncSpace } from '../services/sync
 import Toast from 'react-native-toast-message';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColorScheme } from 'react-native';
+import * as Updates from 'expo-updates';
 
 import LoadingScreen from '../components/LoadingScreen';
 import AuthScreen from '../components/AuthScreen';
@@ -42,7 +43,6 @@ function MainTabs() {
         name="index"
         options={{
           title: t('agenda'),
-          // Cast color as string to satisfy strict @expo/vector-icons typing
           tabBarIcon: ({ color }) => <Ionicons name="calendar" size={24} color={color as string} />
         }}
       />
@@ -50,7 +50,6 @@ function MainTabs() {
         name="settings"
         options={{
           title: t('settings'),
-          // Cast color as string to satisfy strict @expo/vector-icons typing
           tabBarIcon: ({ color }) => <Ionicons name="settings" size={24} color={color as string} />
         }}
       />
@@ -59,12 +58,29 @@ function MainTabs() {
 }
 
 /**
- * Root application layout managing authentication state and active SyncSpace context.
+ * Root application layout managing silent OTA updates, authentication state, and active SyncSpace context.
  */
 export default function RootLayout() {
   const [isAppLoading, setIsAppLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [familyId, setFamilyId] = useState<string | null>(null);
+
+  // Automatically check and apply OTA updates on app startup
+  useEffect(() => {
+    const checkStartupUpdate = async () => {
+      if (__DEV__) return; // Skip in Expo Go / local development
+      try {
+        const update = await Updates.checkForUpdateAsync();
+        if (update.isAvailable) {
+          await Updates.fetchUpdateAsync();
+          await Updates.reloadAsync();
+        }
+      } catch (error) {
+        // Ignore update errors silently on startup
+      }
+    };
+    checkStartupUpdate();
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {

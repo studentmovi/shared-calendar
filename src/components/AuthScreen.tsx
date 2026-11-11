@@ -6,7 +6,11 @@ import { auth, db } from '../config/firebase';
 import { ensureUserInSyncSpace, getOrMigrateUserProfile, resolveSyncSpaceIdByCode } from '../services/syncSpaceService';
 import Toast from 'react-native-toast-message';
 import * as Localization from 'expo-localization';
+import * as Updates from 'expo-updates';
+import Constants from 'expo-constants';
+import { Ionicons } from '@expo/vector-icons';
 
+// Detect device language
 const isFrench = Localization.getLocales()[0]?.languageTag?.includes('fr') ?? true;
 
 const translateFirebaseError = (error: any) => {
@@ -35,6 +39,9 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
   const [spaceCode, setSpaceCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isWaitingForVerification, setIsWaitingForVerification] = useState(false);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+
+  const appVersion = `V${Constants.expoConfig?.version || '1.3.0'}`;
 
   useEffect(() => {
     if (auth.currentUser && !auth.currentUser.emailVerified) {
@@ -42,6 +49,47 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
       setIsWaitingForVerification(true);
     }
   }, []);
+
+  /**
+   * Allow users to manually trigger an OTA update directly from the authentication screen.
+   */
+  const handleCheckUpdate = async () => {
+    try {
+      setIsCheckingUpdate(true);
+      const update = await Updates.checkForUpdateAsync();
+
+      if (update.isAvailable) {
+        Toast.show({
+          type: 'info',
+          text1: 'Mise à jour',
+          text2: isFrench ? 'Mise à jour trouvée ! Téléchargement...' : 'Update found! Downloading...'
+        });
+        await Updates.fetchUpdateAsync();
+        Toast.show({
+          type: 'success',
+          text1: 'Succès',
+          text2: isFrench ? 'Mise à jour prête ! Redémarrage...' : 'Update ready! Restarting...'
+        });
+        setTimeout(() => {
+          Updates.reloadAsync();
+        }, 1500);
+      } else {
+        Toast.show({
+          type: 'success',
+          text1: 'Info',
+          text2: isFrench ? 'L\'application est déjà à jour.' : 'App is already up to date.'
+        });
+      }
+    } catch (error) {
+      Toast.show({
+        type: 'success',
+        text1: 'Info',
+        text2: isFrench ? 'L\'application est déjà à jour.' : 'App is already up to date.'
+      });
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  };
 
   const handleAuth = async () => {
     if (!email.trim() || !password) {
@@ -124,6 +172,28 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
     setIsWaitingForVerification(false);
   };
 
+  const renderUpdateFooter = () => (
+    <View style={styles.versionContainer}>
+      <Text style={styles.versionText}>{appVersion}</Text>
+      <TouchableOpacity
+        style={styles.updateBtn}
+        onPress={handleCheckUpdate}
+        disabled={isCheckingUpdate}
+      >
+        {isCheckingUpdate ? (
+          <ActivityIndicator color="#0F172A" size="small" />
+        ) : (
+          <>
+            <Ionicons name="cloud-download-outline" size={18} color="#0F172A" style={{ marginRight: 6 }} />
+            <Text style={styles.updateBtnText}>
+              {isFrench ? 'Vérifier les mises à jour' : 'Check for updates'}
+            </Text>
+          </>
+        )}
+      </TouchableOpacity>
+    </View>
+  );
+
   if (isWaitingForVerification) {
     return (
       <View style={styles.container}>
@@ -143,6 +213,8 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
             <Text style={styles.cancelBtnText}>Annuler et se déconnecter</Text>
           </TouchableOpacity>
         </View>
+
+        {renderUpdateFooter()}
       </View>
     );
   }
@@ -207,6 +279,8 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
           </Text>
         </TouchableOpacity>
       </View>
+
+      {renderUpdateFooter()}
     </View>
   );
 }
@@ -221,5 +295,9 @@ const styles = StyleSheet.create({
   btnText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
   cancelBtn: { backgroundColor: '#F1F5F9', padding: 15, borderRadius: 10, alignItems: 'center', marginTop: 10 },
   cancelBtnText: { color: '#64748B', fontWeight: 'bold', fontSize: 14 },
-  switchText: { color: '#64748B', textAlign: 'center', marginTop: 10, textDecorationLine: 'underline' }
+  switchText: { color: '#64748B', textAlign: 'center', marginTop: 10, textDecorationLine: 'underline' },
+  versionContainer: { alignItems: 'center', marginTop: 25 },
+  versionText: { fontSize: 13, fontWeight: 'bold', color: '#94A3B8', letterSpacing: 1 },
+  updateBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#E2E8F0', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, marginTop: 10 },
+  updateBtnText: { color: '#0F172A', fontWeight: 'bold', fontSize: 13 }
 });
