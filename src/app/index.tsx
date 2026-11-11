@@ -1,12 +1,14 @@
 import React, { useState, useRef } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Modal, KeyboardAvoidingView, Platform, Switch, useColorScheme } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useSharedCalendar, CalendarDay, Event, Reminder } from '../hooks/useSharedCalendar';
 import { useTranslation } from '../context/LanguageContext';
 import { Ionicons } from '@expo/vector-icons';
-
-// Import de notre logique métier séparée
 import { fetchAddressSuggestions, PlaceSuggestion } from '../services/googlePlaces';
 
+/**
+ * Format database date (YYYY-MM-DD) to European display format (DD/MM/YYYY).
+ */
 const formatToFR = (dbDate: string) => {
   if (!dbDate) return '';
   const parts = dbDate.split('-');
@@ -14,9 +16,12 @@ const formatToFR = (dbDate: string) => {
   return `${parts[2]}/${parts[1]}/${parts[0]}`;
 };
 
+/**
+ * Parse European date (DD/MM/YYYY) back to database format (YYYY-MM-DD).
+ */
 const parseToDB = (frDate: string) => {
   if (!frDate) return '';
-  const sanitized = frDate.replace(/[-.]/g, '/'); 
+  const sanitized = frDate.replace(/[-.]/g, '/');
   const parts = sanitized.split('/');
   if (parts.length === 3) return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
   return frDate;
@@ -40,21 +45,23 @@ const applyPersonalRules = (title: string, defaultColor: string) => {
 };
 
 const getMonthDecoration = (monthIndex: number) => {
-  if (monthIndex === 9) return { left: '🕸️', right: '🎃', subtitle: "Halloween !" };
-  if (monthIndex === 11) return { left: '🎄', right: '🎁', subtitle: "Fêtes !" };
+  if (monthIndex === 9) return { left: '🕸️', right: '🎃', subtitle: 'Halloween !' };
+  if (monthIndex === 11) return { left: '🎄', right: '🎁', subtitle: 'Fêtes !' };
   if (monthIndex === 0) return { left: '🥂', right: '🎆', subtitle: `Année ${new Date().getFullYear()} !` };
-  if (monthIndex === 1) return { left: '💘', right: '🍫', subtitle: "Amour" };
+  if (monthIndex === 1) return { left: '💘', right: '🍫', subtitle: 'Amour' };
   return { left: '', right: '', subtitle: '' };
 };
 
 export default function SharedCalendarScreen() {
   const { t } = useTranslation();
-  const systemTheme = useColorScheme(); 
-  
-  const { 
-    events, selectedDate, setSelectedDate, handleAddEvent, updateEvent, deleteEvent, 
+  const router = useRouter();
+  const systemTheme = useColorScheme();
+
+  const {
+    familyId, spaceName,
+    events, selectedDate, setSelectedDate, handleAddEvent, updateEvent, deleteEvent,
     monthGrid, currentMonthName, nextMonth, prevMonth, members, showAlert,
-    theme, appBackgroundColor, numberColor, fabColor 
+    theme, appBackgroundColor, numberColor, fabColor
   } = useSharedCalendar();
 
   const currentTheme = theme === 'system' ? systemTheme : theme;
@@ -64,22 +71,21 @@ export default function SharedCalendarScreen() {
   const [isModalVisible, setModalVisible] = useState(false);
   const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
-  
-  const [modalTitle, setModalTitle] = useState(''); 
-  const [modalDescription, setModalDescription] = useState('');
-  const [modalLocation, setModalLocation] = useState(''); 
-  
-  const [addressSuggestions, setAddressSuggestions] = useState<PlaceSuggestion[]>([]);
-  
-  // Chronomètre pour limiter les appels API Google (Debounce)
-  const debounceTimer = useRef<NodeJS.Timeout | null>(null);
 
-  const [modalTime, setModalTime] = useState(''); 
+  const [modalTitle, setModalTitle] = useState('');
+  const [modalDescription, setModalDescription] = useState('');
+  const [modalLocation, setModalLocation] = useState('');
+  const [addressSuggestions, setAddressSuggestions] = useState<PlaceSuggestion[]>([]);
+
+  // Use ReturnType<typeof setTimeout> for universal TypeScript compatibility without NodeJS namespace
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [modalTime, setModalTime] = useState('');
   const [modalEndTime, setModalEndTime] = useState('');
-  const [modalEndDate, setModalEndDate] = useState(''); 
+  const [modalEndDate, setModalEndDate] = useState('');
   const [modalIsAllDay, setModalIsAllDay] = useState(false);
   const [modalParticipantId, setModalParticipantId] = useState('');
-  
+
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [tempRemAmount, setTempRemAmount] = useState('15');
   const [tempRemUnit, setTempRemUnit] = useState('minutes');
@@ -87,52 +93,60 @@ export default function SharedCalendarScreen() {
   const daysOfWeek = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
   const todayDate = new Date();
   const todayString = `${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, '0')}-${String(todayDate.getDate()).padStart(2, '0')}`;
-  
-  const displayedMonthIndex = monthGrid.find((d: CalendarDay) => d.isCurrentMonth) 
-    ? new Date(monthGrid.find((d: CalendarDay) => d.isCurrentMonth)!.dateString).getMonth() 
+
+  const displayedMonthIndex = monthGrid.find((d: CalendarDay) => d.isCurrentMonth)
+    ? new Date(monthGrid.find((d: CalendarDay) => d.isCurrentMonth)!.dateString).getMonth()
     : todayDate.getMonth();
-    
+
   const decorations = getMonthDecoration(displayedMonthIndex);
   const getMemberColor = (id: string) => members.find((m: any) => m.id === id)?.color || '#CCCCCC';
 
+  // Empty state when the user has no active SyncSpace yet
+  if (!familyId) {
+    return (
+      <View style={[styles.emptySpaceContainer, { backgroundColor: isDark ? '#0F172A' : '#F8FAFC' }]}>
+        <View style={[styles.emptySpaceCard, { backgroundColor: isDark ? '#1E293B' : '#FFFFFF' }]}>
+          <Ionicons name="planet-outline" size={64} color="#FF4D4D" style={{ marginBottom: 16 }} />
+          <Text style={[styles.emptySpaceTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>{t('noSpaceTitle')}</Text>
+          <Text style={[styles.emptySpaceDesc, { color: isDark ? '#94A3B8' : '#64748B' }]}>{t('noSpaceDesc')}</Text>
+          <TouchableOpacity style={[styles.emptySpaceBtn, { backgroundColor: '#FF4D4D' }]} onPress={() => router.push('/settings')}>
+            <Ionicons name="settings-outline" size={20} color="#FFF" style={{ marginRight: 8 }} />
+            <Text style={styles.emptySpaceBtnText}>{t('goToSettings')}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   const openModal = (mode: 'add' | 'edit', ev?: Event, dateString?: string) => {
     setModalMode(mode);
-    setAddressSuggestions([]); 
-    
-    // Nettoyer le chronomètre si on ouvre/ferme
+    setAddressSuggestions([]);
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
 
     if (mode === 'add') {
       if (!selectedDate) setSelectedDate(todayString);
       setModalTitle(''); setModalDescription(''); setModalLocation('');
-      setModalTime(''); setModalEndTime(''); setModalEndDate(''); setModalIsAllDay(false); 
+      setModalTime(''); setModalEndTime(''); setModalEndDate(''); setModalIsAllDay(false);
       setModalParticipantId(members[0]?.id || ''); setReminders([]);
     } else if (ev && dateString) {
-      setSelectedDate(ev.date || dateString); 
+      setSelectedDate(ev.date || dateString);
       setEditingEventId(ev.id);
-      setModalTitle(ev.title); setModalDescription(ev.description || ''); 
+      setModalTitle(ev.title); setModalDescription(ev.description || '');
       setModalLocation(ev.location || '');
-      setModalTime(ev.time || ''); setModalEndTime(ev.endTime || ''); 
-      setModalEndDate(ev.endDate ? formatToFR(ev.endDate) : ''); 
+      setModalTime(ev.time || ''); setModalEndTime(ev.endTime || '');
+      setModalEndDate(ev.endDate ? formatToFR(ev.endDate) : '');
       setModalIsAllDay(ev.isAllDay || false); setModalParticipantId(ev.participantId); setReminders(ev.reminders || []);
     }
     setModalVisible(true);
   };
 
-  // NOUVELLE FONCTION AVEC DEBOUNCE (ÉCONOMIE API)
   const handleAddressInput = (text: string) => {
     setModalLocation(text);
-    
-    // 1. On annule la requête précédente si l'utilisateur est toujours en train de taper
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
-    
-    // 2. Si le texte est vide ou trop court, on vide les suggestions et on s'arrête là
     if (text.length < 3) {
       setAddressSuggestions([]);
       return;
     }
-
-    // 3. On déclenche un nouveau chrono de 600ms
     debounceTimer.current = setTimeout(async () => {
       const suggestions = await fetchAddressSuggestions(text);
       setAddressSuggestions(suggestions);
@@ -152,52 +166,52 @@ export default function SharedCalendarScreen() {
   };
 
   const handleSave = () => {
-    if (!modalTitle.trim()) return showAlert(t('error'), t('emptyTitle'), 'error'); 
+    if (!modalTitle.trim()) return showAlert(t('error'), t('emptyTitle'), 'error');
     const parsedEndDate = modalIsAllDay ? parseToDB(modalEndDate) : '';
-    
-    const eventData = { 
+
+    const eventData = {
       title: modalTitle, description: modalDescription, location: modalLocation,
-      time: modalTime, endTime: modalEndTime, endDate: parsedEndDate, 
-      isAllDay: modalIsAllDay, participantId: modalParticipantId, reminders 
+      time: modalTime, endTime: modalEndTime, endDate: parsedEndDate,
+      isAllDay: modalIsAllDay, participantId: modalParticipantId, reminders
     };
-    
+
     if (modalMode === 'add') handleAddEvent(selectedDate, eventData);
     else if (editingEventId) updateEvent(selectedDate, { ...eventData, id: editingEventId });
-    
+
     setModalVisible(false);
   };
 
-  const handleDelete = () => { 
-    if (editingEventId && selectedDate) deleteEvent(selectedDate, editingEventId); 
-    setModalVisible(false); 
+  const handleDelete = () => {
+    if (editingEventId && selectedDate) deleteEvent(selectedDate, editingEventId);
+    setModalVisible(false);
   };
 
   const renderDayCell = (day: CalendarDay, index: number) => {
     if (!day.isCurrentMonth) return <View key={index} style={[styles.emptyCell, { borderTopWidth: 1, borderColor: isDark ? '#334155' : '#F1F5F9' }]} />;
-    const isSelected = selectedDate === day.dateString; 
+    const isSelected = selectedDate === day.dateString;
     const rawEvents = events[day.dateString] || [];
     const uniqueEventsMap = new Map();
     rawEvents.forEach((ev: Event) => uniqueEventsMap.set(ev.id, ev));
     const dayEvents = Array.from(uniqueEventsMap.values());
-    dayEvents.sort((a, b) => a.id.localeCompare(b.id)); 
-    const isToday = day.dateString === todayString; 
-    
+    dayEvents.sort((a, b) => a.id.localeCompare(b.id));
+    const isToday = day.dateString === todayString;
+
     return (
       <TouchableOpacity key={index} style={[styles.dayCell, { borderColor: isDark ? '#334155' : '#F1F5F9' }, isSelected && { borderWidth: 2, borderColor: isDark ? '#FFFFFF' : '#333', borderRadius: 8 }, isToday && { backgroundColor: isDark ? '#334155' : '#F1F5F9' }]} onPress={() => setSelectedDate(day.dateString)} activeOpacity={0.6}>
         <Text style={[styles.dayNumber, isToday && styles.textBold, { color: (isDark && numberColor === '#333333') ? '#FFFFFF' : numberColor }]}>{day.dayNumber}</Text>
         <View style={styles.pillContainer}>
           {dayEvents.map((ev: Event, i: number) => {
-             const styleData = applyPersonalRules(ev.title, getMemberColor(ev.participantId));
-             const span = ev.spanStatus || 'single';
-             const isConnectedLeft = (span === 'middle' || span === 'end') && index % 7 !== 0; 
-             const isConnectedRight = (span === 'start' || span === 'middle') && index % 7 !== 6; 
-             const showText = span === 'start' || span === 'single' || index % 7 === 0;
+            const styleData = applyPersonalRules(ev.title, getMemberColor(ev.participantId));
+            const span = ev.spanStatus || 'single';
+            const isConnectedLeft = (span === 'middle' || span === 'end') && index % 7 !== 0;
+            const isConnectedRight = (span === 'start' || span === 'middle') && index % 7 !== 6;
+            const showText = span === 'start' || span === 'single' || index % 7 === 0;
 
-             return (
-               <TouchableOpacity key={i} style={[styles.eventPill, { backgroundColor: styleData.bg }, styleData.isCustom && styles.customPillBorder, isConnectedLeft && { marginLeft: 0, borderTopLeftRadius: 0, borderBottomLeftRadius: 0 }, isConnectedRight && { marginRight: 0, borderTopRightRadius: 0, borderBottomRightRadius: 0 }]} onPress={() => openModal('edit', ev, day.dateString)} activeOpacity={0.7}>
-                 <Text style={[styles.pillText, {color: showText ? styleData.text : 'transparent'}]} numberOfLines={1}>{showText ? `${styleData.icon} ${ev.title}` : ' '}</Text>
-               </TouchableOpacity>
-             );
+            return (
+              <TouchableOpacity key={i} style={[styles.eventPill, { backgroundColor: styleData.bg }, styleData.isCustom && styles.customPillBorder, isConnectedLeft && { marginLeft: 0, borderTopLeftRadius: 0, borderBottomLeftRadius: 0 }, isConnectedRight && { marginRight: 0, borderTopRightRadius: 0, borderBottomRightRadius: 0 }]} onPress={() => openModal('edit', ev, day.dateString)} activeOpacity={0.7}>
+                <Text style={[styles.pillText, { color: showText ? styleData.text : 'transparent' }]} numberOfLines={1}>{showText ? `${styleData.icon} ${ev.title}` : ' '}</Text>
+              </TouchableOpacity>
+            );
           })}
         </View>
       </TouchableOpacity>
@@ -207,6 +221,11 @@ export default function SharedCalendarScreen() {
   return (
     <View style={[styles.container, { backgroundColor: appBackgroundColor }]}>
       <View style={styles.headerArea}>
+        <View style={styles.spaceBadgeRow}>
+          <Ionicons name="planet" size={14} color="#FFF" style={{ marginRight: 5 }} />
+          <Text style={styles.spaceBadgeText}>{spaceName}</Text>
+        </View>
+
         <View style={styles.topBar}>
           <TouchableOpacity onPress={prevMonth} style={styles.navBtn}><Text style={styles.navBtnText}>&lt;</Text></TouchableOpacity>
           <View style={styles.titleContainer}>
@@ -215,16 +234,19 @@ export default function SharedCalendarScreen() {
           </View>
           <TouchableOpacity onPress={nextMonth} style={styles.navBtn}><Text style={styles.navBtnText}>&gt;</Text></TouchableOpacity>
         </View>
+
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.membersScroll}>
           {members.map((m: any) => (
-             <View key={m.id} style={[styles.memberBadge, { backgroundColor: m.color }]}><Text style={[styles.memberBadgeText, m.color === '#FFFFFF' ? {color: '#000'} : {}]}>{m.name}</Text></View>
+            <View key={m.id} style={[styles.memberBadge, { backgroundColor: m.color }]}>
+              <Text style={[styles.memberBadgeText, m.color === '#FFFFFF' ? { color: '#000' } : {}]}>{m.name}</Text>
+            </View>
           ))}
         </ScrollView>
       </View>
 
       <View style={[styles.calendarArea, { backgroundColor: isDark ? '#1E293B' : '#FFFFFF' }]}>
         <View style={styles.daysRow}>
-          {daysOfWeek.map((day, i) => <Text key={i} style={[styles.dayOfWeekText, { color: isDark ? '#94A3B8' : '#94A3B8' }]}>{day}</Text>)}
+          {daysOfWeek.map((day, i) => <Text key={i} style={[styles.dayOfWeekText, { color: '#94A3B8' }]}>{day}</Text>)}
         </View>
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollPadding}>
           <View style={styles.grid}>{monthGrid.map((day: CalendarDay, index: number) => renderDayCell(day, index))}</View>
@@ -242,7 +264,7 @@ export default function SharedCalendarScreen() {
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
           <View style={[styles.modalContainer, { backgroundColor: isDark ? '#0F172A' : '#FFFFFF' }]}>
             <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.modalScrollContent}>
-              
+
               <View style={styles.modalHeaderRow}>
                 <Text style={[styles.modalHeader, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
                   {modalMode === 'add' ? t('addEvent') : t('editEvent')}
@@ -251,28 +273,27 @@ export default function SharedCalendarScreen() {
                   <Ionicons name="close-circle" size={32} color="#94A3B8" />
                 </TouchableOpacity>
               </View>
-              
-              <TextInput style={[styles.input, isDark && styles.inputDark]} placeholderTextColor={isDark ? '#94A3B8' : '#94A3B8'} placeholder={t('titlePlaceholder')} value={modalTitle} onChangeText={setModalTitle} />
-              
-              {/* Champ Adresse avec Suggestions */}
+
+              <TextInput style={[styles.input, isDark && styles.inputDark]} placeholderTextColor="#94A3B8" placeholder={t('titlePlaceholder')} value={modalTitle} onChangeText={setModalTitle} />
+
               <View style={{ zIndex: 10, marginBottom: 12 }}>
-                <TextInput 
-                  style={[styles.input, isDark && styles.inputDark, { marginBottom: 0 }]} 
-                  placeholderTextColor={isDark ? '#94A3B8' : '#94A3B8'} 
-                  placeholder="📍 Adresse (ex: Pairi Daiza)" 
-                  value={modalLocation} 
-                  onChangeText={handleAddressInput} 
+                <TextInput
+                  style={[styles.input, isDark && styles.inputDark, { marginBottom: 0 }]}
+                  placeholderTextColor="#94A3B8"
+                  placeholder="📍 Adresse (ex: Pairi Daiza)"
+                  value={modalLocation}
+                  onChangeText={handleAddressInput}
                 />
-                
+
                 {addressSuggestions.length > 0 && (
                   <View style={[styles.suggestionBox, { backgroundColor: isDark ? '#1E293B' : '#FFF' }]}>
                     {addressSuggestions.map((item) => (
-                      <TouchableOpacity 
-                        key={item.id} 
-                        style={styles.suggestionRow} 
+                      <TouchableOpacity
+                        key={item.id}
+                        style={styles.suggestionRow}
                         onPress={() => selectAddress(item.description)}
                       >
-                        <Ionicons name="location-outline" size={20} color={isDark ? '#94A3B8' : '#64748B'} style={{marginRight: 10}}/>
+                        <Ionicons name="location-outline" size={20} color={isDark ? '#94A3B8' : '#64748B'} style={{ marginRight: 10 }} />
                         <Text style={{ color: isDark ? '#FFF' : '#333', flexShrink: 1 }}>{item.description}</Text>
                       </TouchableOpacity>
                     ))}
@@ -280,46 +301,46 @@ export default function SharedCalendarScreen() {
                 )}
               </View>
 
-              <TextInput style={[styles.input, isDark && styles.inputDark, { height: 70, textAlignVertical: 'top' }]} placeholderTextColor={isDark ? '#94A3B8' : '#94A3B8'} placeholder="Notes additionnelles..." value={modalDescription} onChangeText={setModalDescription} multiline />
+              <TextInput style={[styles.input, isDark && styles.inputDark, { height: 70, textAlignVertical: 'top' }]} placeholderTextColor="#94A3B8" placeholder="Notes additionnelles..." value={modalDescription} onChangeText={setModalDescription} multiline />
 
               <View style={[styles.timeSection, isDark && styles.timeSectionDark]}>
-                  <View style={styles.switchContainer}>
-                    <Text style={[styles.subLabel, {color: isDark ? '#FFF' : '#333'}]}>{t('allDay')}</Text>
-                    <Switch value={modalIsAllDay} onValueChange={setModalIsAllDay} />
+                <View style={styles.switchContainer}>
+                  <Text style={[styles.subLabel, { color: isDark ? '#FFF' : '#333' }]}>{t('allDay')}</Text>
+                  <Switch value={modalIsAllDay} onValueChange={setModalIsAllDay} />
+                </View>
+                {!modalIsAllDay ? (
+                  <View style={styles.timesContainer}>
+                    <TextInput style={[styles.input, isDark && styles.inputDark, { flex: 1, marginBottom: 0 }]} placeholderTextColor="#94A3B8" placeholder={t('start')} value={modalTime} onChangeText={setModalTime} />
+                    <TextInput style={[styles.input, isDark && styles.inputDark, { flex: 1, marginBottom: 0 }]} placeholderTextColor="#94A3B8" placeholder={t('end')} value={modalEndTime} onChangeText={setModalEndTime} />
                   </View>
-                  {!modalIsAllDay ? (
-                      <View style={styles.timesContainer}>
-                          <TextInput style={[styles.input, isDark && styles.inputDark, { flex: 1, marginBottom: 0 }]} placeholderTextColor={isDark ? '#94A3B8' : '#94A3B8'} placeholder={t('start')} value={modalTime} onChangeText={setModalTime} />
-                          <TextInput style={[styles.input, isDark && styles.inputDark, { flex: 1, marginBottom: 0 }]} placeholderTextColor={isDark ? '#94A3B8' : '#94A3B8'} placeholder={t('end')} value={modalEndTime} onChangeText={setModalEndTime} />
-                      </View>
-                  ) : (
-                      <TextInput style={[styles.input, isDark && styles.inputDark, { marginTop: 10 }]} placeholderTextColor={isDark ? '#94A3B8' : '#94A3B8'} placeholder={t('endDate')} value={modalEndDate} onChangeText={setModalEndDate} />
-                  )}
+                ) : (
+                  <TextInput style={[styles.input, isDark && styles.inputDark, { marginTop: 10 }]} placeholderTextColor="#94A3B8" placeholder={t('endDate')} value={modalEndDate} onChangeText={setModalEndDate} />
+                )}
               </View>
 
-              <Text style={[styles.subLabel, {marginTop: 15, marginBottom: 10, color: isDark ? '#FFF' : '#333'}]}>{t('reminders')}</Text>
+              <Text style={[styles.subLabel, { marginTop: 15, marginBottom: 10, color: isDark ? '#FFF' : '#333' }]}>{t('reminders')}</Text>
               {reminders.map((rem, i) => (
                 <View key={i} style={styles.reminderRow}>
                   <Text style={styles.reminderBadge}>{rem.amount} {t(rem.unit as keyof typeof t)} {t('before')}</Text>
                   <TouchableOpacity onPress={() => setReminders(reminders.filter((_, idx) => idx !== i))}><Ionicons name="trash" size={20} color="#EF4444" /></TouchableOpacity>
                 </View>
               ))}
-              
+
               <View style={styles.addReminderRow}>
-                <TextInput style={[styles.remInput, isDark && styles.inputDark]} keyboardType="numeric" value={tempRemAmount} onChangeText={setTempRemAmount} placeholderTextColor={isDark ? '#94A3B8' : '#94A3B8'} placeholder="15" />
-                <TouchableOpacity style={[styles.remUnitBtn, isDark && styles.remUnitBtnDark, tempRemUnit === 'minutes' && styles.remUnitActive]} onPress={() => setTempRemUnit('minutes')}><Text style={[tempRemUnit === 'minutes' ? styles.remTextActive : {color: isDark ? '#FFF' : '#333'}]}>{t('minutes')}</Text></TouchableOpacity>
-                <TouchableOpacity style={[styles.remUnitBtn, isDark && styles.remUnitBtnDark, tempRemUnit === 'hours' && styles.remUnitActive]} onPress={() => setTempRemUnit('hours')}><Text style={[tempRemUnit === 'hours' ? styles.remTextActive : {color: isDark ? '#FFF' : '#333'}]}>{t('hours')}</Text></TouchableOpacity>
-                <TouchableOpacity style={[styles.remUnitBtn, isDark && styles.remUnitBtnDark, tempRemUnit === 'days' && styles.remUnitActive]} onPress={() => setTempRemUnit('days')}><Text style={[tempRemUnit === 'days' ? styles.remTextActive : {color: isDark ? '#FFF' : '#333'}]}>{t('days')}</Text></TouchableOpacity>
+                <TextInput style={[styles.remInput, isDark && styles.inputDark]} keyboardType="numeric" value={tempRemAmount} onChangeText={setTempRemAmount} placeholderTextColor="#94A3B8" placeholder="15" />
+                <TouchableOpacity style={[styles.remUnitBtn, isDark && styles.remUnitBtnDark, tempRemUnit === 'minutes' && styles.remUnitActive]} onPress={() => setTempRemUnit('minutes')}><Text style={[tempRemUnit === 'minutes' ? styles.remTextActive : { color: isDark ? '#FFF' : '#333' }]}>{t('minutes')}</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.remUnitBtn, isDark && styles.remUnitBtnDark, tempRemUnit === 'hours' && styles.remUnitActive]} onPress={() => setTempRemUnit('hours')}><Text style={[tempRemUnit === 'hours' ? styles.remTextActive : { color: isDark ? '#FFF' : '#333' }]}>{t('hours')}</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.remUnitBtn, isDark && styles.remUnitBtnDark, tempRemUnit === 'days' && styles.remUnitActive]} onPress={() => setTempRemUnit('days')}><Text style={[tempRemUnit === 'days' ? styles.remTextActive : { color: isDark ? '#FFF' : '#333' }]}>{t('days')}</Text></TouchableOpacity>
                 <TouchableOpacity style={styles.remAddBtn} onPress={handleAddReminder}><Ionicons name="add" size={20} color="#FFF" /></TouchableOpacity>
               </View>
 
-              <Text style={[styles.subLabel, {marginTop: 15, color: isDark ? '#FFF' : '#333'}]}>{t('assignTo')}</Text>
+              <Text style={[styles.subLabel, { marginTop: 15, color: isDark ? '#FFF' : '#333' }]}>{t('assignTo')}</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.formParticipantScroll}>
-                  {members.map((m: any) => (
-                    <TouchableOpacity key={m.id} style={[styles.formParticipantBtn, { backgroundColor: m.color }, modalParticipantId === m.id && {borderColor: isDark ? '#FFF' : '#333'}]} onPress={() => setModalParticipantId(m.id)}>
-                      <Text style={m.color === '#FFFFFF' ? {color: '#000', fontWeight:'bold'} : {fontWeight:'bold', color:'#FFF'}}>{m.name}</Text>
-                    </TouchableOpacity>
-                  ))}
+                {members.map((m: any) => (
+                  <TouchableOpacity key={m.id} style={[styles.formParticipantBtn, { backgroundColor: m.color }, modalParticipantId === m.id && { borderColor: isDark ? '#FFF' : '#333' }]} onPress={() => setModalParticipantId(m.id)}>
+                    <Text style={m.color === '#FFFFFF' ? { color: '#000', fontWeight: 'bold' } : { fontWeight: 'bold', color: '#FFF' }}>{m.name}</Text>
+                  </TouchableOpacity>
+                ))}
               </ScrollView>
 
               <View style={styles.modalActionRow}>
@@ -342,8 +363,17 @@ export default function SharedCalendarScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  headerArea: { paddingTop: 60, paddingBottom: 20, paddingHorizontal: 20 },
-  topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  emptySpaceContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
+  emptySpaceCard: { width: '100%', borderRadius: 24, padding: 30, alignItems: 'center', elevation: 4 },
+  emptySpaceTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 10, textAlign: 'center' },
+  emptySpaceDesc: { fontSize: 15, textAlign: 'center', lineHeight: 22, marginBottom: 24 },
+  emptySpaceBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 24, borderRadius: 14 },
+  emptySpaceBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
+
+  headerArea: { paddingTop: 55, paddingBottom: 20, paddingHorizontal: 20 },
+  spaceBadgeRow: { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.2)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, marginBottom: 8 },
+  spaceBadgeText: { color: '#FFF', fontSize: 12, fontWeight: '700', letterSpacing: 0.5 },
+  topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   navBtn: { padding: 10, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 10 },
   navBtnText: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
   titleContainer: { alignItems: 'center' },
@@ -351,7 +381,7 @@ const styles = StyleSheet.create({
   monthSubtitle: { fontSize: 12, color: 'rgba(255,255,255,0.8)', fontStyle: 'italic', marginTop: 2 },
   membersScroll: { flexDirection: 'row' },
   memberBadge: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 10 },
-  memberBadgeText: { fontWeight: 'bold', color: '#333' },
+  memberBadgeText: { fontWeight: 'bold', color: '#FFF' },
   calendarArea: { flex: 1, borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingTop: 20, paddingHorizontal: 10 },
   daysRow: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 10 },
   dayOfWeekText: { fontSize: 14, fontWeight: '600', color: '#94A3B8', width: '14.28%', textAlign: 'center' },
@@ -373,10 +403,8 @@ const styles = StyleSheet.create({
   modalScrollContent: { padding: 24, paddingBottom: 50 },
   modalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   modalHeader: { fontSize: 20, fontWeight: 'bold' },
-  
   suggestionBox: { position: 'absolute', top: 55, left: 0, right: 0, zIndex: 20, borderRadius: 10, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4 },
   suggestionRow: { flexDirection: 'row', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderBottomColor: 'rgba(150,150,150,0.2)' },
-  
   input: { backgroundColor: '#F8FAFC', color: '#333333', padding: 14, borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: '#E2E8F0', fontSize: 15 },
   inputDark: { backgroundColor: '#1E293B', color: '#FFFFFF', borderColor: '#334155' },
   timeSection: { backgroundColor: '#F1F5F9', padding: 15, borderRadius: 12, marginBottom: 15, zIndex: 1 },
@@ -387,7 +415,7 @@ const styles = StyleSheet.create({
   reminderRow: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#FEF2F2', padding: 12, borderRadius: 10, marginBottom: 10, alignItems: 'center' },
   reminderBadge: { color: '#DC2626', fontWeight: 'bold' },
   addReminderRow: { flexDirection: 'row', gap: 8, marginBottom: 25 },
-  remInput: { flex: 1, backgroundColor: '#F1F5F9', borderRadius: 10, paddingHorizontal: 10, textAlign: 'center', fontSize: 16, color: '#333333' }, 
+  remInput: { flex: 1, backgroundColor: '#F1F5F9', borderRadius: 10, paddingHorizontal: 10, textAlign: 'center', fontSize: 16, color: '#333333' },
   remUnitBtn: { paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#F1F5F9', borderRadius: 10, justifyContent: 'center' },
   remUnitBtnDark: { backgroundColor: '#1E293B' },
   remUnitActive: { backgroundColor: '#3B82F6' },
